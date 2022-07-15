@@ -1,8 +1,17 @@
 let isPaused = true;
 let mainFont;
-let boxImage, blueGemImage, orangeGemImage;
+let boxImages = [], blueGemImages = [], orangeGemImages = [];
+let playerImage, aiImage;
 
 let CARDS_LIST, CONSTANTS, cellSize, gridPoints, scene, justChangedScene;
+let landingShockwave = {
+	timer: -999, // plays at 0
+	pos: [0,0]
+};
+function makeShockwave(pos){
+	landingShockwave.pos = pos;
+	landingShockwave.timer = CONSTANTS.DELAYS.BOX_FALL;
+}
 
 
 let PlayScene = {
@@ -34,7 +43,7 @@ let PlayScene = {
 	delayTimer: 0,
 	remainingCards: [],
 	
-	board: [], // 4x4 array of item objects {itemName,fallProgress}
+	board: [], // 4x4 array of item objects {itemName,fallProgress, itemImageIndex}
 	slidingCards: [], // array of {isP1,index,data,progress}
 	blownItems: [], // array of {itemName,timer,vel,renderPos}
 	glowScore: {isP1: false, timer: 0},
@@ -71,15 +80,6 @@ let Button = function(t, x, y, w, h, s, action){
 		text(t, x, y);
 	};
 };
-PlayScene.buttons.push(new Button(
-	"?",
-	525, 120, 50, 50, 30,
-	function(){
-		scene = CONSTANTS.SCENES.HELP;
-		justChangedScene = true;
-	}
-));
-
 
 
 
@@ -188,12 +188,12 @@ function startGame(isAgainstComputer){
 	for (var y=0; y < 5; y++){
 	    var row = [];
 	    for (var x=0; x < 5; x++){
-	        var renderPos = getRenderPos([x,y], cellSize);
+	        var renderPos = getRenderPos([x,y]);
 	        row.push([
 	            renderPos[0] - 0.5*cellSize + 
-	            (random() > 0.5 ? random(5,9) : -random(2,3)), 
+	            _(random() > 0.5 ? random(3,5) : -random(3,5)), 
 	            renderPos[1] - 0.5*cellSize + 
-	            (random() > 0.5 ? random(5,9) : -random(2,3))
+	            _(random() > 0.5 ? random(3,5) : -random(3,5))
 	        ]);
 	    }
 	    gridPoints.push(row);
@@ -362,7 +362,12 @@ function getStrikePoints(_targetedPositions){
 		if (itemName === CONSTANTS.ITEM_NAMES.ORANGE){
 			orangeGemsCount++;
 		}
-		return {pos: pos, itemName: itemName, point: getPoint(itemName)};
+		return {
+			pos: pos, 
+			itemName: itemName, 
+			itemImageIndex: slot.itemImageIndex, 
+			point: getPoint(itemName)
+		};
 	});
 	strikedItems = strikedItems.filter(function(obj){
 		return obj !== null;
@@ -427,18 +432,25 @@ function playSelectedCard(){
 			contentName = CONSTANTS.ITEM_NAMES.ORANGE;
 		}
 		PlayScene.board[pos[1]][pos[0]] = contentName === null ? null :
-		{itemName: contentName, fallProgress: 0};
+		{
+			itemName: contentName, 
+			fallProgress: 0, 
+			itemImageIndex: floor(random(0,3))
+		};
 		
 		// add fake flying item
 		PlayScene.blownItems.push({
+			itemImageIndex: itemObj.itemImageIndex,
 			itemName: itemObj.itemName,
 			timer: CONSTANTS.DELAYS.BOX_FALL,
-			vel: [random(-5,5), random(-10,-15)],
+			vel: [_(random(-5,5)), _(random(-10,-15))],
 			renderPos: getRenderPos(pos)
 		});
 	});
 	
 	spawnBox([x,y]); // add box (also check if board fills)
+	makeShockwave([x,y]);
+
 	// add sliding card
 	PlayScene.slidingCards.push({
 		isP1: PlayScene.isP1Turn,
@@ -508,7 +520,8 @@ function spawnBox(pos){
 		
 		PlayScene.board[y][x] = {
 			itemName: boxName,
-			fallProgress: CONSTANTS.DELAYS.BOX_FALL
+			fallProgress: CONSTANTS.DELAYS.BOX_FALL,
+			itemImageIndex: floor(random(0,3))
 		};
 		setPlayingDelay(CONSTANTS.DELAYS.BOX_FALL);
 		
@@ -579,14 +592,14 @@ function getTargetedPositions(card, centerPos){
 	return resultArr;
 }
 
-function getImg(itemName){
-	if (itemName === CONSTANTS.ITEM_NAMES.BLUE){
-		return blueGemImage;
-	} else if (itemName === CONSTANTS.ITEM_NAMES.ORANGE){
-		return orangeGemImage;
+function getImg(item){
+	if (item.itemName === CONSTANTS.ITEM_NAMES.BLUE){
+		return blueGemImages[item.itemImageIndex];
+	} else if (item.itemName === CONSTANTS.ITEM_NAMES.ORANGE){
+		return orangeGemImages[item.itemImageIndex];
 	} 
 	else { // box
-		return boxImage;
+		return boxImages[item.itemImageIndex];
 	}
 }
 
@@ -609,12 +622,12 @@ function renderSlot(item,rx,ry,s){
 		if (item.fallProgress && item.fallProgress > 0)
 		{item.fallProgress--;}
 	
-		var itemImg = getImg(item.itemName);
-		var imgSize = s - max(item.fallProgress - 15, 0)*5;
+		var itemImg = getImg(item);
+		var imgSize = s - max(item.fallProgress-10, 0)*_(5);
 		
 		image(
 			itemImg, 
-			rx, ry - item.fallProgress*3, 
+			rx, ry - item.fallProgress*_(3), 
 			imgSize, imgSize
 		);
 	}
@@ -742,9 +755,15 @@ function mouseReleased(){
 
 function preload(){
 	mainFont = loadFont('assets/Minecraft.ttf');
-	boxImage = loadImage('assets/box.png');
-	blueGemImage = loadImage('assets/blueGem.png');
-	orangeGemImage = loadImage('assets/orangeGem.png');
+	playerImage = loadImage("assets/items/player.png");
+	aiImage = loadImage("assets/items/ai.png");
+
+	for (let i=0; i < 3; i++){
+		boxImages.push(loadImage(`assets/items/box${i+1}.png`));
+		blueGemImages.push(loadImage(`assets/items/coins${i+1}.png`));
+		orangeGemImages.push(loadImage(`assets/items/gem${i+1}.png`));
+	}
+
 }
 
 function setup() {
@@ -763,9 +782,9 @@ function setup() {
 		SCENES: {WELCOME:"WELCOME",MENU:"MENU",PLAY:"PLAY",HELP:"HELP"},
 		COLOR_1: 30, // BLACK
 		COLOR_2: 230, // WHITE
-		COLOR_3: "green", //GREEN
-		COLOR_4: "red", //RED
-		COLOR_5: "yellow", // YELLOW
+		COLOR_3: color(0, 250, 0), //GREEN
+		COLOR_4: color(250, 0, 0), //RED
+		COLOR_5: color(250, 250, 0), // YELLOW
 		CREATURES_LIST: [],
 		PLAYGROUND: {SIZE: 400, POS: [215, 260]},
 		
@@ -775,7 +794,7 @@ function setup() {
 			START:"START",PLAYING:"PLAYING",OVER:"OVER"
 		},
 		CARD_SIZE: _(65),
-		DRAW_PILE_POS: [_(525), _(250)],
+		DRAW_PILE_POS: [_(600), _(300)],
 		BOARD: {SIZE: _(420), POS: [_(230), _(300)]},
 		P1_CARDS_Y: _(42),
 		P2_CARDS_Y: _(570),
@@ -880,7 +899,18 @@ function setup() {
 	textAlign(CENTER, CENTER);
 	angleMode(DEGREES);
 	textFont(mainFont);
+	noSmooth();
+	strokeJoin(ROUND);
 
+	// help button
+	PlayScene.buttons.push(new Button(
+		"?",
+		_(390), _(650), _(60), _(40), _(30),
+		function(){
+			scene = CONSTANTS.SCENES.HELP;
+			justChangedScene = true;
+		}
+	));
 
   Rune.init({
     resumeGame: function () {
@@ -914,7 +944,7 @@ function draw() {
 	justChangedScene = false;
   	clear();
 	//////
-	background(0);
+	//background(0);
 	
 	if (scene === CONSTANTS.SCENES.PLAY){
 		// reset
@@ -922,13 +952,24 @@ function draw() {
 		PlayScene.targetedPositions = null;
 		
 		updateAI(); // AI
+
+		// render shockwave
+		landingShockwave.timer--;
+		if (landingShockwave.timer <= 0 && landingShockwave.timer > -30){
+			let renderPos = getRenderPos(landingShockwave.pos);
+			strokeWeight(_(2));
+			noFill();
+			let s = map(landingShockwave.timer, 0, -30, 0, 1);
+			stroke(255, 255 - (s*255));
+			ellipse(renderPos[0], renderPos[1] + _(30), _(250*s), _(30*s));
+		}
 		
 		var checkHoverMarginFactor = 0.9;
-		// board grid
-		stroke(CONSTANTS.COLOR_2); strokeWeight(2); noFill();
+		// board
+		stroke(CONSTANTS.COLOR_2); strokeWeight(_(2)); noFill();
 		for (var y=0; y<4; y++){
 			for (var x=0; x<4; x++){
-				var renderPos = getRenderPos([x,y], cellSize);
+				var renderPos = getRenderPos([x,y]);
 				var rx = renderPos[0], ry = renderPos[1];
 				// check to set hoveredPos
 				if (notComputerTurn() && PlayScene.hoveredPos === null &&
@@ -951,86 +992,87 @@ function draw() {
 		}
 		
 		// renders buttons 
-		stroke(changableColor()); strokeWeight(3);
+		stroke(changableColor()); strokeWeight(_(3));
 		PlayScene.buttons.forEach(function(btn){
 			btn.isHovered = false; // reset
 			btn.draw();
 		});
 		
 		// renders draw pile
-		strokeWeight(3);
-		var nextCard = PlayScene.remainingCards[0]? PlayScene.remainingCards[0].data : null;
-		if (nextCard){
-			renderCard(
-				nextCard,
-				CONSTANTS.DRAW_PILE_POS[0], CONSTANTS.DRAW_PILE_POS[1], 
-				false
-			);
-			fill(changableColor());
-			textSize(25);
-			noStroke();
-			text(PlayScene.remainingCards.length, 525, 300);
-		}
+		// strokeWeight(_(3));
+		// var nextCard = PlayScene.remainingCards[0]? PlayScene.remainingCards[0].data : null;
+		// if (nextCard){
+		// 	renderCard(
+		// 		nextCard,
+		// 		CONSTANTS.DRAW_PILE_POS[0], CONSTANTS.DRAW_PILE_POS[1], 
+		// 		false
+		// 	);
+		// }
 		
-		// renders scores
+		// render scores
 		noStroke();
-		var playerNames = PlayScene.isAgainstComputer?CONSTANTS.PVE:
-		CONSTANTS.PVP;
+		textSize(_(40));
+		text("-", _(180), _(650));
+		var playerNames = CONSTANTS.PVE;
 		if (PlayScene.glowScore.timer > 0) {PlayScene.glowScore.timer--;}
 		if (PlayScene.glowScore.isP1 && PlayScene.glowScore.timer > 0){
 			fill(CONSTANTS.COLOR_3);
 		} else {fill(changableColor());}
-		textSize(22);
-		text(playerNames.P1, 525, 390);
-		textSize(40);
-		text(PlayScene.p1.score, 525, 430);
+		text(PlayScene.p1.score, _(220), _(650));
+		image(playerImage, _(80), _(650), _(60), _(60));
 		
 		if (!PlayScene.glowScore.isP1 && PlayScene.glowScore.timer > 0){
 			fill(CONSTANTS.COLOR_3);
 		} else {fill(changableColor());}
-		textSize(22);
-		text(playerNames.P2, 525, 490);
-		textSize(40);
-		text(PlayScene.p2.score, 525, 530);
+		text(PlayScene.p2.score, _(140), _(650));
+		image(aiImage, _(280), _(650), _(60), _(60));
 		
 		// player double status
-		textSize(18);
-		stroke(changableColor());
-		noFill();
-		
+		textSize(_(30));
+		noStroke();
+
 		// P1
-        for (var i=0; i < 5; i++){
-            if (PlayScene.p1.brokenBoxes > i){
-                strokeWeight(7);
-            } else {
-                strokeWeight(1);
-            }
-            arc(390, CONSTANTS.P1_CARDS_Y, 50, 50, i*72 + 15 - 90, (i+1)*72 - 15 - 90);
-        }
+		if (PlayScene.p1.brokenBoxes >= 5){
+			fill(CONSTANTS.COLOR_5);
+		} else {
+			fill(changableColor());
+		}
+		push();
+		translate(_(390), CONSTANTS.P1_CARDS_Y);
+		text("X2", 0, 0);
+		rotate(-144);
+		for (let i=0; i<5; i++){
+			if (PlayScene.p1.brokenBoxes <= i) break;
+			rect(0, _(30), _(30), _(5));
+			rotate(72);
+		}
+		pop();
+
         // P2
-        for (var i=0; i < 5; i++){
-            if (PlayScene.p2.brokenBoxes > i){
-                strokeWeight(7);
-            } else {
-                strokeWeight(1);
-            }
-            arc(390, CONSTANTS.P2_CARDS_Y, 50, 50, i*72 + 15 - 90, (i+1)*72 - 15 - 90);
-        }
-        
-        noStroke();
-        fill(changableColor());
-		//////////////// yellow if doubledddd
-        text("X2", 390, CONSTANTS.P1_CARDS_Y);
-        text("X2", 390, CONSTANTS.P2_CARDS_Y);
+        if (PlayScene.p2.brokenBoxes >= 5){
+			fill(CONSTANTS.COLOR_5);
+		} else {
+			fill(changableColor());
+		}
+		push();
+		translate(_(390), CONSTANTS.P2_CARDS_Y);
+		text("X2", 0, 0);
+		rotate(-144);
+		for (let i=0; i<5; i++){
+			if (PlayScene.p2.brokenBoxes <= i) break;
+			rect(0, _(30), _(30), _(5));
+			rotate(72);
+		}
+		pop();
         
 		
 		// renders fake cards sliding down (remove when done)
-		strokeWeight(3);
+		strokeWeight(_(3));
 		PlayScene.slidingCards = PlayScene.slidingCards
 		.filter(function(slideCard){
-			var renderX = 75 + 100 * slideCard.index;
+			var renderX = _(75) + _(100) * slideCard.index;
 			var renderY;
-			var offsetY = (CONSTANTS.DELAYS.SLIDE_CARD - slideCard.progress)*5;
+			var offsetY = (CONSTANTS.DELAYS.SLIDE_CARD - slideCard.progress)*_(10);
 			if (slideCard.isP1){
 				renderY = CONSTANTS.P1_CARDS_Y - offsetY;
 			} else {
@@ -1056,23 +1098,22 @@ function draw() {
 			if (item.timer-- < 0){
 				item.renderPos[0] += item.vel[0];
 				item.renderPos[1] += item.vel[1];
-				item.vel[1] += 0.7; // gravity
+				item.vel[1] += _(0.7); // gravity
 			}
-			var itemImg = getImg(item.itemName);
+			var itemImg = getImg(item);
 			var imgSize = cellSize;
 			image(
 				itemImg, 
 				item.renderPos[0], item.renderPos[1], 
 				imgSize, imgSize
 			);
-			return item.renderPos[1] < 700;
+			return item.renderPos[1] < _(800);
 		});
-		
 		
 		// renders targeted slot borders and score
 		if (PlayScene.targetedPositions !== null){
 			// renders borders
-			strokeWeight(5); 
+			strokeWeight(_(5)); 
 			stroke(CONSTANTS.COLOR_5); 
 			noFill();
 			PlayScene.targetedPositions.forEach(function(pos){
@@ -1087,10 +1128,10 @@ function draw() {
 				// renders overlay bg
 				fill(0,0,0,180);
 				rect(renderPos[0],renderPos[1],
-				cellSize*0.4,cellSize*0.4,10);
+				cellSize*0.5,cellSize*0.5, _(5));
 				if (obj.point > 0) {fill(CONSTANTS.COLOR_3);}
 				else {fill(CONSTANTS.COLOR_4);}
-				textSize(30);
+				textSize(_(30));
 				var slotPoint = (obj.point > 0 ? "+":"") + obj.point;
 				noStroke();
 				text(slotPoint, renderPos[0],renderPos[1]);
@@ -1101,12 +1142,14 @@ function draw() {
 			var totalPoints = strikedItems.reduce(function(p,obj){
 				return p + obj.point;
 			},0);
-			fill(CONSTANTS.COLOR_5); textSize(50);
+			fill(CONSTANTS.COLOR_5); textSize(_(60));
 			noStroke();
 			if (totalPoints > 0) {totalPoints = "+"+totalPoints;}
 			// apply shaking if is doubled
 				if ((PlayScene.p1.brokenBoxes >= 5 && PlayScene.isP1Turn) || (PlayScene.p2.brokenBoxes >= 5 && !PlayScene.isP1Turn)){
-				text(totalPoints, cRenderPos[0] + random(-2, 2), cRenderPos[1] + random(-2, 2));
+				text(totalPoints, 
+					cRenderPos[0] + _(random(-2, 2)), 
+					cRenderPos[1] + _(random(-2, 2)));
 			}
 			else {
 			    text(totalPoints, cRenderPos[0],cRenderPos[1]);
@@ -1132,9 +1175,9 @@ function draw() {
 			fill(0,0,0,200);
 			noStroke();
 			rect(CONSTANTS.BOARD.POS[0], CONSTANTS.BOARD.POS[1], 
-			300, 70, 10);
+			_(300), _(70), _(10));
 			fill(CONSTANTS.COLOR_5);
-			textSize(35);
+			textSize(_(35));
 			noStroke();
 			text(displayText, 
 			CONSTANTS.BOARD.POS[0], CONSTANTS.BOARD.POS[1]);
@@ -1162,7 +1205,7 @@ function draw() {
 	}
 	else if (scene === CONSTANTS.SCENES.HELP){
 		textAlign(LEFT,LEFT);
-		textSize(18);
+		textSize(_(18));
 		fill(250, 250, 0);
 		var rules = [
 			"- Each turn you can play 2 cards.",
