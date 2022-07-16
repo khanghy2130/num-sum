@@ -1,4 +1,6 @@
 let isPaused = true;
+let isDeterministic = true;
+
 let mainFont;
 let boxImages = [], blueGemImages = [], orangeGemImages = [];
 let playerImage, aiImage;
@@ -13,6 +15,13 @@ function makeShockwave(pos){
 	landingShockwave.timer = CONSTANTS.DELAYS.BOX_FALL;
 }
 
+function semiRandom(start, end){
+	if (isDeterministic){
+		return map(Rune.deterministicRandom(), 0, 1, start, end);
+	} else {
+		return random(start, end);
+	}
+}
 
 let PlayScene = {
 	buttons: [],
@@ -165,23 +174,30 @@ function startGame(isAgainstComputer){
 	AI.moves = [];
 	AI.nextMove = null;
 	
-	PlayScene.isP1Turn = random() < 0.5;
+	PlayScene.isP1Turn = semiRandom(0,1) < 0.5;
 	PlayScene.board = [];
 	for (var i=0; i<4; i++){
 		PlayScene.board.push([null,null,null,null].slice());
 	}
 	
 	// shuffle the cards
-	PlayScene.remainingCards = [];
+	const orderedArray = [];
 	CARDS_LIST.forEach(function(card){
 		// add multiple copies of the same card to random index
-		for (var i=0; i < card.count; i++){
-			PlayScene.remainingCards.splice(
-				floor(random() * PlayScene.remainingCards.length),
-				0, card
-			);
+		for (let i=0; i < card.count; i++){
+			orderedArray.push(card);
 		}
 	});
+	const shuffledArray = [];
+	while (orderedArray.length > 0){
+		const randomNumber = shuffledArray.length < 6? semiRandom(0,1): random(0,1);
+		shuffledArray.push(
+			orderedArray.splice(
+				floor(randomNumber * orderedArray.length),1
+			)[0]
+		);
+	}
+	PlayScene.remainingCards = shuffledArray;
 	
 	// new gridPoints
 	gridPoints = [];
@@ -198,6 +214,12 @@ function startGame(isAgainstComputer){
 	    }
 	    gridPoints.push(row);
 	}
+
+	// bg colors
+	const bgColor1 = semiRandom(0, 360);
+	const bgColor2 = semiRandom(50, 300);
+	document.getElementById("overlay").style.backgroundImage = `linear-gradient(hsla(${bgColor1}, 100%, 15%, 0.6), hsla(${bgColor1+bgColor2}, 100%, 15%, 0.6))`;
+
 	
 	//PlayScene.remainingCards = PlayScene.remainingCards.slice(16);
 }
@@ -298,6 +320,7 @@ function afterDelayPhaseStart(){
 
 // runs at the start of a turn
 function beginTurn(){
+	isDeterministic = false;
 	PlayScene.selectedCardIndex = null;
 	// if more than 1 card in hand then give 2 actions
 	// if only 1 then give 1 action
@@ -503,7 +526,7 @@ function spawnBoxRandom(){
 	.filter(function(pos){return pos;});
 	if (emptySlotPositions.length > 0){
 		spawnBox(emptySlotPositions[
-			floor(random()*emptySlotPositions.length)
+			floor(semiRandom(0,1)*emptySlotPositions.length)
 		]);
 	} else { endGame(); return;}
 }
@@ -521,7 +544,7 @@ function spawnBox(pos){
 		PlayScene.board[y][x] = {
 			itemName: boxName,
 			fallProgress: CONSTANTS.DELAYS.BOX_FALL,
-			itemImageIndex: floor(random(0,3))
+			itemImageIndex: floor(semiRandom(0,3))
 		};
 		setPlayingDelay(CONSTANTS.DELAYS.BOX_FALL);
 		
@@ -776,7 +799,7 @@ function setup() {
 		// 0.99 fix overflow
 		CANVAS_WIDTH * 0.99,
 		CANVAS_WIDTH * HEIGHT_RATIO * 0.99
-	);
+	).parent("overlay");
 
 	CONSTANTS = {
 		SCENES: {WELCOME:"WELCOME",MENU:"MENU",PLAY:"PLAY",HELP:"HELP"},
@@ -912,21 +935,21 @@ function setup() {
 		}
 	));
 
-  Rune.init({
-    resumeGame: function () {
-		isPaused = false;
-		ee = Rune.deterministicRandom();
-    },
-    pauseGame: function () {
-		isPaused = true;
-    },
-    restartGame: function () {
-		///// reset game
-    },
-    getScore: function () {
-      return 10;
-    }
-  });
+	Rune.init({
+		resumeGame: function () {
+			isPaused = false;
+		},
+		pauseGame: function () {
+			isPaused = true;
+		},
+		restartGame: function () {
+			isDeterministic = true;
+			///// reset game
+		},
+		getScore: function () {
+			return 10;
+		}
+	});
 
 
 //   setTimeout(function () {
@@ -957,11 +980,10 @@ function draw() {
 		landingShockwave.timer--;
 		if (landingShockwave.timer <= 0 && landingShockwave.timer > -30){
 			let renderPos = getRenderPos(landingShockwave.pos);
-			strokeWeight(_(2));
-			noFill();
 			let s = map(landingShockwave.timer, 0, -30, 0, 1);
-			stroke(255, 255 - (s*255));
-			ellipse(renderPos[0], renderPos[1] + _(30), _(250*s), _(30*s));
+			noStroke();
+			fill(255, 255 - (s*255));
+			ellipse(renderPos[0], renderPos[1] + _(30), _(200*s), _(30*s));
 		}
 		
 		var checkHoverMarginFactor = 0.9;

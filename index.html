@@ -12,18 +12,27 @@
       }
       body {
         display: flex;
+        overflow: hidden;
+        min-height: 100vh;
+        background-image: url("assets/bg.png");
+        background-repeat: no-repeat;
+        background-size: cover;
+      }
+      #overlay {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 100vh;
         overflow: hidden;
-        background-image: linear-gradient(black, gray);
       }
     </style>
 
   </head>
   <body oncontextmenu="return false;">
-    <main>
-    </main>
+    
+      <div id="overlay"></div>
+    
     <script src="sketch.js"></script>
   
 
