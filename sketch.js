@@ -425,15 +425,15 @@ function getStrikePoints(_targetedPositions){
 
 // runs when a card is played
 function playSelectedCard(){
+	let actualPreviewPos = notComputerTurn()?previewPos:PlayScene.hoveredPos;
 	if (PlayScene.selectedCardIndex === null ||
-	PlayScene.hoveredPos === null) {return;}
-	var x = PlayScene.hoveredPos[0], y = PlayScene.hoveredPos[1];
+		actualPreviewPos === null) {return;}
+	var x = actualPreviewPos[0], y = actualPreviewPos[1];
 	// slot not empty
 	if (PlayScene.board[y][x] !== null) {return;}
 	
 	// SUCCESS PLAY
 	var cardsArray = getCurrentCardsArray();
-	var playedCard = getCurrentCardsArray()[PlayScene.selectedCardIndex];
 	
 	// apply damage
 	var strikedItems = getStrikePoints(PlayScene.targetedPositions);
@@ -487,6 +487,7 @@ function playSelectedCard(){
 	PlayScene.actionsLeft--;
 	PlayScene.selectedCardIndex = null;
 	PlayScene.targetedPositions = null;
+	previewPos = null;
 	
 	// score & broken boxes
 	PlayScene.glowScore.isP1 = PlayScene.isP1Turn;
@@ -731,19 +732,16 @@ function updateAI(){
 	}
 }
 
+let previewPos = null;
 
-function mouseReleased(){
-	var currentSceneObject;
-	if (scene === CONSTANTS.SCENES.MENU){
-		currentSceneObject = MenuScene;
+function mouseClicked(){
+	// HELP scene click
+	if (scene === CONSTANTS.SCENES.HELP && !justChangedScene){
+		scene = CONSTANTS.SCENES.PLAY;
 	}
-	else if (scene === CONSTANTS.SCENES.PLAY){
-		currentSceneObject = PlayScene;
-	}
-	
-	// check clicking a button in MENU & PLAY
-	if (currentSceneObject && currentSceneObject.canClick){
-		currentSceneObject.buttons.forEach(function(btn){
+	// check clicking a button in PLAY
+	else if (PlayScene.canClick){
+		PlayScene.buttons.forEach(function(btn){
 			if (btn.isHovered) {btn.action();return;}
 		});
 	}
@@ -759,20 +757,30 @@ function mouseReleased(){
 			var btnCard = cardsArray[i];
 			if (btnCard && btnCard.isHovered){
 				PlayScene.selectedCardIndex = i;
+				previewPos = null;
 				return;
 			}
 		}
+
+		// clear preview
+		if (PlayScene.hoveredPos === null) previewPos = null;
 		
 		// clicking a spot?
 		if (PlayScene.selectedCardIndex !== null && 
 		PlayScene.hoveredPos !== null){
-			playSelectedCard();
+			// set preview if none
+			if (!previewPos){
+				previewPos = PlayScene.hoveredPos;
+			} else {
+				// match preview?
+				if (PlayScene.hoveredPos[0] === previewPos[0] &&
+					PlayScene.hoveredPos[1] === previewPos[1]){
+						playSelectedCard();	
+				} else {
+					previewPos = PlayScene.hoveredPos;
+				}
+			}
 		}
-	}
-	
-	// HELP scene click
-	if (scene === CONSTANTS.SCENES.HELP && !justChangedScene){
-		scene = CONSTANTS.SCENES.PLAY;
 	}
 }
 
@@ -974,8 +982,6 @@ function draw() {
 	translate(width/2-CANVAS_WIDTH/2, height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 	justChangedScene = false;
   	clear();
-	//////
-	//background(0);
 	
 	if (scene === CONSTANTS.SCENES.PLAY){
 		// reset
@@ -1012,12 +1018,14 @@ function draw() {
 				renderSlot(PlayScene.board[y][x],rx,ry,cellSize);
 			}
 		}
+
+		let actualPreviewPos = notComputerTurn()?previewPos:PlayScene.hoveredPos;
 		
-		if (PlayScene.hoveredPos !== null &&
+		if (actualPreviewPos !== null &&
 		PlayScene.selectedCardIndex !== null){
 			PlayScene.targetedPositions = getTargetedPositions(
 				getCurrentCardsArray()[PlayScene.selectedCardIndex].card,
-				PlayScene.hoveredPos
+				actualPreviewPos
 			);
 		}
 		
@@ -1027,17 +1035,6 @@ function draw() {
 			btn.isHovered = false; // reset
 			btn.draw();
 		});
-		
-		// renders draw pile
-		// strokeWeight(_(3));
-		// var nextCard = PlayScene.remainingCards[0]? PlayScene.remainingCards[0].data : null;
-		// if (nextCard){
-		// 	renderCard(
-		// 		nextCard,
-		// 		CONSTANTS.DRAW_PILE_POS[0], CONSTANTS.DRAW_PILE_POS[1], 
-		// 		false
-		// 	);
-		// }
 		
 		// render scores
 		noStroke();
@@ -1168,7 +1165,7 @@ function draw() {
 			});
 			
 			// renders center
-			var cRenderPos = getRenderPos(PlayScene.hoveredPos);
+			var cRenderPos = getRenderPos(actualPreviewPos);
 			var totalPoints = strikedItems.reduce(function(p,obj){
 				return p + obj.point;
 			},0);
