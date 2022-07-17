@@ -1,9 +1,15 @@
 let isPaused = true;
 let isDeterministic = true;
+let finalScore = 0;
 
 let mainFont;
 let boxImages = [], blueGemImages = [], orangeGemImages = [];
 let playerImage, aiImage;
+let landingSound = {src: "assets/sounds/landing.mp3", vol:0.5};
+let cardSound = {src: "assets/sounds/cardSelect.wav", vol:0.5};
+let previewSound = {src: "assets/sounds/preview.wav", vol:0.6};
+let bgMusic = {src: "assets/sounds/music.wav", vol:0.4};
+const allSounds = [landingSound, cardSound, previewSound, bgMusic];
 
 let CARDS_LIST, CONSTANTS, cellSize, gridPoints, scene, justChangedScene;
 let landingShockwave = {
@@ -70,8 +76,7 @@ let Button = function(t, x, y, w, h, s, action){
 	
 	this.draw = function(){
 		// check hover
-		if ((scene === CONSTANTS.SCENES.MENU && MenuScene.canClick) || 
-		(scene === CONSTANTS.SCENES.PLAY && PlayScene.canClick)){
+		if ((scene === CONSTANTS.SCENES.PLAY && PlayScene.canClick)){
 			if (getMouseX() > x-w/2 && getMouseX() < x+w/2 && 
 			getMouseY() > y-h/2 && getMouseY() < y+h/2 ){
 				this.isHovered = true;
@@ -119,28 +124,16 @@ function getCurrentCardsArray(){
 	return PlayScene.isP1Turn ? PlayScene.p1.cards : PlayScene.p2.cards;
 }
 
+
+function gameOver(){
+	let fs = PlayScene.p2.score;
+	if (fs > PlayScene.p1.score) fs *= 10;
+	else if (fs === PlayScene.p1.score) fs *= 5;
+	finalScore = fs;
+	Rune.gameOver();
+}
+
 function endGame(){
-	// add xp
-	var earnedXP = PlayScene.isAgainstComputer ?
-	PlayScene.p2.score :
-	max(PlayScene.p1.score,PlayScene.p2.score);
-	// win against computer? double score
-	if (PlayScene.isAgainstComputer && 
-	PlayScene.p2.score > PlayScene.p1.score){
-		earnedXP *= 2;
-	}
-	MenuScene.earnedXP += earnedXP;
-	
-	// set highscore & wins count
-	if (PlayScene.isAgainstComputer){
-		if (PlayScene.p2.score > PlayScene.p1.score){
-			MenuScene.winsCount++;
-		}
-		if (PlayScene.p2.score > MenuScene.highScore){
-			MenuScene.highScore = PlayScene.p2.score;
-		}
-	}
-	
 	PlayScene.phase = CONSTANTS.PHASES.OVER;
 	PlayScene.canClick = false;
 	PlayScene.delayTimer = CONSTANTS.DELAYS.GAMEOVER;
@@ -220,7 +213,6 @@ function startGame(isAgainstComputer){
 	const bgColor2 = semiRandom(50, 300);
 	document.getElementById("overlay").style.backgroundImage = `linear-gradient(hsla(${bgColor1}, 100%, 15%, 0.6), hsla(${bgColor1+bgColor2}, 100%, 15%, 0.6))`;
 
-	
 	//PlayScene.remainingCards = PlayScene.remainingCards.slice(16);
 }
 
@@ -725,6 +717,7 @@ function updateAI(){
 			AI.nextMove = AI.moves.shift();
 			AI.timer = 90; // showing move delay
 			PlayScene.selectedCardIndex = AI.nextMove.cardIndex;
+			playSound(cardSound);
 		}
 		
 		// not calculated yet?
@@ -735,6 +728,8 @@ function updateAI(){
 let previewPos = null;
 
 function mouseClicked(){
+	if (!CONSTANTS) return;
+
 	// HELP scene click
 	if (scene === CONSTANTS.SCENES.HELP && !justChangedScene){
 		scene = CONSTANTS.SCENES.PLAY;
@@ -758,6 +753,7 @@ function mouseClicked(){
 			if (btnCard && btnCard.isHovered){
 				PlayScene.selectedCardIndex = i;
 				previewPos = null;
+				playSound(cardSound);
 				return;
 			}
 		}
@@ -771,6 +767,7 @@ function mouseClicked(){
 			// set preview if none
 			if (!previewPos){
 				previewPos = PlayScene.hoveredPos;
+				playSound(previewSound);
 			} else {
 				// match preview?
 				if (PlayScene.hoveredPos[0] === previewPos[0] &&
@@ -778,10 +775,30 @@ function mouseClicked(){
 						playSelectedCard();	
 				} else {
 					previewPos = PlayScene.hoveredPos;
+					playSound(previewSound);
 				}
 			}
 		}
 	}
+}
+
+function sound(src) {
+	this.sound = document.createElement("audio");
+	this.sound.src = src;
+	this.sound.setAttribute("preload", "auto");
+	this.sound.setAttribute("controls", "none");
+	this.sound.style.display = "none";
+	document.body.appendChild(this.sound);
+	this.play = function(){
+	  this.sound.play();
+	}
+	this.stop = function(){
+	  this.sound.pause();
+	}
+}
+
+function playSound(soundItem){
+	if (soundItem.sound && !soundItem.sound.isPlaying()) soundItem.sound.play();
 }
 
 function preload(){
@@ -793,6 +810,17 @@ function preload(){
 		boxImages.push(loadImage(`assets/items/box${i+1}.png`));
 		blueGemImages.push(loadImage(`assets/items/coins${i+1}.png`));
 		orangeGemImages.push(loadImage(`assets/items/gem${i+1}.png`));
+	}
+
+	if (loadSound){
+		allSounds.forEach(item => {
+			item.sound = loadSound(item.src, ()=>{
+				item.sound.setVolume(item.vol);
+				if (item === bgMusic){
+					item.sound.loop();
+				}
+			});
+		});
 	}
 
 }
@@ -953,19 +981,15 @@ function setup() {
 		},
 		restartGame: function () {
 			isDeterministic = true;
-			///// reset game
+			startGame(true);
 		},
 		getScore: function () {
-			return 10;
+			return max(finalScore, 0);
 		}
 	});
 
-
-//   setTimeout(function () {
-//     Rune.gameOver(); // only call if not paused, check if paused or resumed
-//   }, 5000);
-
 	startGame(true);
+	playSound(bgMusic);
 }
 
 function changableColor(){
@@ -979,6 +1003,7 @@ function getMouseY(){
 	return mouseY - (height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 }
 function draw() {
+	if (isPaused) return;
 	translate(width/2-CANVAS_WIDTH/2, height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 	justChangedScene = false;
   	clear();
@@ -993,6 +1018,9 @@ function draw() {
 		// render shockwave
 		landingShockwave.timer--;
 		if (landingShockwave.timer <= 0 && landingShockwave.timer > -30){
+			if (landingShockwave.timer === 0){
+				playSound(landingSound);
+			}
 			let renderPos = getRenderPos(landingShockwave.pos);
 			let s = map(landingShockwave.timer, 0, -30, 0, 1);
 			noStroke();
@@ -1225,7 +1253,7 @@ function draw() {
 				}
 				// phase OVER
 				else if (PlayScene.phase === CONSTANTS.PHASES.OVER){
-					scene = CONSTANTS.SCENES.MENU;
+					gameOver();
 				}
 			}
 		}
