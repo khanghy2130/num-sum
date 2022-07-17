@@ -72,8 +72,8 @@ let Button = function(t, x, y, w, h, s, action){
 		// check hover
 		if ((scene === CONSTANTS.SCENES.MENU && MenuScene.canClick) || 
 		(scene === CONSTANTS.SCENES.PLAY && PlayScene.canClick)){
-			if (mouseX > x-w/2 && mouseX < x+w/2 && 
-			mouseY > y-h/2 && mouseY < y+h/2 ){
+			if (getMouseX() > x-w/2 && getMouseX() < x+w/2 && 
+			getMouseY() > y-h/2 && getMouseY() < y+h/2 ){
 				this.isHovered = true;
 			}
 		}
@@ -278,8 +278,8 @@ function renderBtnCard(btnCard, index, isP1){
 	var isSelected = isActive && PlayScene.selectedCardIndex === index;
 	btnCard.isHovered = PlayScene.canClick && 
 	isActive && notComputerTurn() &&
-	abs(renderX - mouseX) <= CONSTANTS.CARD_SIZE/2 &&
-	abs(renderY - mouseY) <= CONSTANTS.CARD_SIZE/2;
+	abs(renderX - getMouseX()) <= CONSTANTS.CARD_SIZE/2 &&
+	abs(renderY - getMouseY()) <= CONSTANTS.CARD_SIZE/2;
 	renderCard(
 		btnCard.card.data, 
 		renderX, renderY, 
@@ -789,16 +789,17 @@ function preload(){
 
 }
 
+let CANVAS_WIDTH, HEIGHT_RATIO;
+
 function setup() {
-	const HEIGHT_RATIO = 1.5;
-	const CANVAS_WIDTH = min(
+	HEIGHT_RATIO = 1.5;
+	CANVAS_WIDTH = min(
 		document.documentElement.clientWidth,
 		document.documentElement.clientHeight/HEIGHT_RATIO
 	);
 	createCanvas(
-		// 0.99 fix overflow
-		CANVAS_WIDTH * 0.99,
-		CANVAS_WIDTH * HEIGHT_RATIO * 0.99
+		document.documentElement.clientWidth,
+		document.documentElement.clientHeight
 	).parent("overlay");
 
 	CONSTANTS = {
@@ -963,7 +964,14 @@ function changableColor(){
 	return CONSTANTS.COLOR_2;
 }
 
+function getMouseX(){
+	return mouseX - (width/2-CANVAS_WIDTH/2);
+}
+function getMouseY(){
+	return mouseY - (height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
+}
 function draw() {
+	translate(width/2-CANVAS_WIDTH/2, height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 	justChangedScene = false;
   	clear();
 	//////
@@ -996,8 +1004,8 @@ function draw() {
 				// check to set hoveredPos
 				if (notComputerTurn() && PlayScene.hoveredPos === null &&
 				PlayScene.board[y][x] === null &&
-				abs(rx-mouseX) < cellSize/2*checkHoverMarginFactor &&
-				abs(ry-mouseY) < cellSize/2*checkHoverMarginFactor){
+				abs(rx-getMouseX()) < cellSize/2*checkHoverMarginFactor &&
+				abs(ry-getMouseY()) < cellSize/2*checkHoverMarginFactor){
 					PlayScene.hoveredPos = [x, y];
 				}
 				renderSlotBorder(x, y);
@@ -1251,5 +1259,5 @@ function draw() {
 }
 
 function _(num) {
-  return width / 460 * num;
+  return CANVAS_WIDTH / 460 * num;
 }
