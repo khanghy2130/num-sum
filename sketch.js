@@ -3,6 +3,7 @@ let isDeterministic = true;
 let finalScore = 0;
 
 let mainFont;
+let helpImages = [];
 let boxImages = [], blueGemImages = [], orangeGemImages = [];
 let playerImage, aiImage;
 let landingSound = {src: "assets/sounds/landing.mp3", vol:0.5};
@@ -782,21 +783,6 @@ function mouseClicked(){
 	}
 }
 
-function sound(src) {
-	this.sound = document.createElement("audio");
-	this.sound.src = src;
-	this.sound.setAttribute("preload", "auto");
-	this.sound.setAttribute("controls", "none");
-	this.sound.style.display = "none";
-	document.body.appendChild(this.sound);
-	this.play = function(){
-	  this.sound.play();
-	}
-	this.stop = function(){
-	  this.sound.pause();
-	}
-}
-
 function playSound(soundItem){
 	if (soundItem.sound && !soundItem.sound.isPlaying()) soundItem.sound.play();
 }
@@ -810,6 +796,7 @@ function preload(){
 		boxImages.push(loadImage(`assets/items/box${i+1}.png`));
 		blueGemImages.push(loadImage(`assets/items/coins${i+1}.png`));
 		orangeGemImages.push(loadImage(`assets/items/gem${i+1}.png`));
+		helpImages.push(loadImage(`assets/help/help${i+1}.jpg`));
 	}
 
 	if (loadSound){
@@ -1066,6 +1053,7 @@ function draw() {
 		
 		// render scores
 		noStroke();
+		fill(changableColor());
 		textSize(_(40));
 		text("-", _(180), _(650));
 		var playerNames = CONSTANTS.PVE;
@@ -1259,26 +1247,64 @@ function draw() {
 		}
 	}
 	else if (scene === CONSTANTS.SCENES.HELP){
-		textAlign(LEFT,LEFT);
-		textSize(_(18));
-		fill(250, 250, 0);
-		var rules = [
-			"- Each turn you can play 2 cards.",
-			"A box appears where you play a card.",
-			"Another box appears randomly at the end of turn.",
-			"\n- Double score gained for the next card after\nbreaking 5 boxes.",
-			"\n- A box has either BLUE gem (50%),",
-			"ORANGE gem (25%), or nothing (25%).",
-			"		+1 when breaking a BOX.",
-			"		+2 when breaking a BLUE gem.",
-			"		+3 when breaking multiple ORANGE gems.",
-			"		-3 when breaking a single ORANGE gem.",
-			"\n- Winning against computer doubles your points!"
-		];
-		text(rules.join("\n"),40,80);
-		textAlign(CENTER,CENTER);
+		textSize(_(30));
+		fill(changableColor());
+		
+		image(helpImages[0], _(80), _(70), _(150), _(130));
+		image(helpImages[1], _(235), _(70), _(140), _(130));
+		image(helpImages[2], _(385), _(70), _(140), _(130));
+		text("Play 2 cards per turn", _(230), _(160));
+
+		image(boxImages[1],_(100), _(230), _(100), _(100));
+		image(boxImages[2],_(110), _(240), _(100), _(100));
+		image(boxImages[0],_(120), _(250), _(100), _(100));
+		text("x5    =>", _(230), _(240));
+
+		push();
+		translate(_(350), _(240));
+		noStroke();
 		fill(CONSTANTS.COLOR_5);
-		text("Click to go back...",300,550);
+		text("X2", 0, 0);
+		rotate(-144);
+		for (let i=0; i<5; i++){
+			rect(0, _(30), _(30), _(5));
+			rotate(72);
+		}
+		pop();
+
+		push();
+		strokeWeight(6);
+		stroke(changableColor());
+		line(_(100),_(300),_(100),_(350));
+		line(_(250),_(325),_(250),_(350));
+		line(_(400),_(325),_(400),_(350));
+		line(_(100),_(325),_(400),_(325));
+		pop();
+
+		text("50%", _(100), _(380));
+		text("25%", _(250), _(380));
+		text("25%", _(400), _(380));
+
+		push();
+		translate(_(240), _(460));
+		rotate(-90);
+		text("such\nempty", 0,0);
+		pop();
+
+		image(orangeGemImages[1],_(400), _(430), _(100), _(100));
+		image(orangeGemImages[0],_(425), _(470), _(100), _(100));
+		image(orangeGemImages[2],_(375), _(470), _(100), _(100));
+		image(blueGemImages[2],_(100), _(450), _(100), _(100));
+
+		fill(CONSTANTS.COLOR_3);
+		text("+2", _(100), _(510));
+		text("+3", _(390), _(510));
+		text("+1", _(50), _(300));
+
+		fill(changableColor());
+		text("You should hit 2 or more\nblue gems at once!\nX10 score when won!",
+		_(230), _(600));
+
 	}
 
 }
