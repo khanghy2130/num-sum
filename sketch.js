@@ -727,8 +727,12 @@ function updateAI(){
 }
 
 let previewPos = null;
+let touchCountDown = 0;
 
-function mouseClicked(){
+function touchEnded(){
+	if (touchCountDown > 0) return;
+	else touchCountDown = 10;
+	
 	if (!CONSTANTS) return;
 
 	// HELP scene click
@@ -782,6 +786,8 @@ function mouseClicked(){
 		}
 	}
 }
+
+
 
 function playSound(soundItem){
 	if (soundItem.sound && !soundItem.sound.isPlaying()) soundItem.sound.play();
@@ -990,6 +996,7 @@ function getMouseY(){
 	return mouseY - (height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 }
 function draw() {
+	touchCountDown--;
 	if (isPaused && frameCount !== 1) return;
 	translate(width/2-CANVAS_WIDTH/2, height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 	justChangedScene = false;
