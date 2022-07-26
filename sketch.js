@@ -1,6 +1,5 @@
 let isPaused = true;
 let isDeterministic = true;
-let finalScore = 0;
 
 let mainFont;
 let helpImages = [];
@@ -123,15 +122,6 @@ function setPlayingDelay(delayAmount){
 }
 function getCurrentCardsArray(){
 	return PlayScene.isP1Turn ? PlayScene.p1.cards : PlayScene.p2.cards;
-}
-
-
-function gameOver(){
-	let fs = PlayScene.p2.score;
-	if (fs > PlayScene.p1.score) fs *= 10;
-	else if (fs === PlayScene.p1.score) fs *= 5;
-	finalScore = fs;
-	Rune.gameOver();
 }
 
 function endGame(){
@@ -805,7 +795,7 @@ function preload(){
 		helpImages.push(loadImage(`assets/help/help${i+1}.jpg`));
 	}
 
-	if (loadSound){
+	if (typeof loadSound !== "undefined"){
 		allSounds.forEach(item => {
 			item.sound = loadSound(item.src, ()=>{
 				item.sound.setVolume(item.vol);
@@ -977,7 +967,11 @@ function setup() {
 			startGame(true);
 		},
 		getScore: function () {
-			return max(finalScore, 0);
+			let fs = PlayScene.p2.score;
+			// x10
+			if (PlayScene.phase === CONSTANTS.PHASES.OVER &&
+			fs > PlayScene.p1.score) { fs *= 10; }
+			return max(fs, 0);
 		}
 	});
 
@@ -1248,7 +1242,7 @@ function draw() {
 				}
 				// phase OVER
 				else if (PlayScene.phase === CONSTANTS.PHASES.OVER){
-					gameOver();
+					Rune.gameOver();
 				}
 			}
 		}
