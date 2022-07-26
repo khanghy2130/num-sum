@@ -990,7 +990,7 @@ function getMouseY(){
 	return mouseY - (height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 }
 function draw() {
-	if (isPaused) return;
+	if (isPaused && frameCount !== 1) return;
 	translate(width/2-CANVAS_WIDTH/2, height/2-CANVAS_WIDTH*HEIGHT_RATIO/2);
 	justChangedScene = false;
   	clear();

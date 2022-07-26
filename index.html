@@ -1,7 +1,6 @@
 <!DOCTYPE html><html lang="en"><head>
     <script src="https://cdn.jsdelivr.net/npm/rune-games-sdk@2.4/dist/browser.min.js"></script>
-    <script src="p5.js"></script>
-    <script src="p5.sound.min.js"></script>
+
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
 
@@ -33,7 +32,32 @@
     
       <div id="overlay"></div>
     
-    <script src="sketch.js"></script>
+
+  <!-- <script src="p5.js"></script>
+  <script src="p5.sound.min.js" ></script>
+  <script src="sketch.js"></script> -->
+  <script>
+    function loadScript(src, onload){
+      const script = document.createElement('script');
+      script.onload = onload;
+      script.src = src;
+      document.head.appendChild(script);
+    }
+    function loadGameScript(){
+      loadScript("sketch.js", ()=>{});
+    }
+
+    loadScript("p5.js", ()=>{
+      if (typeof AudioWorklet === "undefined"){
+        loadGameScript();
+      } else {
+        loadScript("p5.sound.min.js", ()=>{
+          loadGameScript();
+        });
+      }
+    });
+    
+  </script>
   
 
 </body></html>
