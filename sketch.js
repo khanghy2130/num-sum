@@ -8,8 +8,7 @@ let playerImage, aiImage;
 let landingSound = {src: "assets/sounds/landing.mp3", vol:0.5};
 let cardSound = {src: "assets/sounds/cardSelect.wav", vol:0.5};
 let previewSound = {src: "assets/sounds/preview.wav", vol:0.6};
-let bgMusic = {src: "assets/sounds/music.wav", vol:0.4};
-const allSounds = [landingSound, cardSound, previewSound, bgMusic];
+const allSounds = [landingSound, cardSound, previewSound];
 
 let CARDS_LIST, CONSTANTS, cellSize, gridPoints, scene, justChangedScene;
 let landingShockwave = {
@@ -799,9 +798,6 @@ function preload(){
 		allSounds.forEach(item => {
 			item.sound = loadSound(item.src, ()=>{
 				item.sound.setVolume(item.vol);
-				if (item === bgMusic){
-					item.sound.loop();
-				}
 			});
 		});
 	}
@@ -976,7 +972,6 @@ function setup() {
 	});
 
 	startGame(true);
-	playSound(bgMusic);
 }
 
 function changableColor(){
