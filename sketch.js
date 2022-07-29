@@ -251,7 +251,7 @@ function renderBtnCard(btnCard, index, isP1){
 	var renderY = isP1 ? CONSTANTS.P1_CARDS_Y : CONSTANTS.P2_CARDS_Y;
 	// update transition animation
 	if (btnCard.transitionProgress < 90){
-		btnCard.transitionProgress += 2;
+		btnCard.transitionProgress += 4;
 		renderX = CONSTANTS.DRAW_PILE_POS[0] - (CONSTANTS.DRAW_PILE_POS[0] - renderX) * sin(btnCard.transitionProgress);
 		renderY = CONSTANTS.DRAW_PILE_POS[1] - (CONSTANTS.DRAW_PILE_POS[1] - renderY) * sin(btnCard.transitionProgress);
 	}
@@ -269,7 +269,7 @@ function renderBtnCard(btnCard, index, isP1){
 		isSelected || btnCard.isHovered || 
 		(PlayScene.selectedCardIndex === null &&
 		PlayScene.canClick &&
-		frameCount % 150 < 30 && isActive)
+		frameCount % 60 < 15 && isActive)
 	);
 }
 
@@ -321,7 +321,7 @@ function beginTurn(){
 	// set up AI
 	if (PlayScene.isAgainstComputer && PlayScene.isP1Turn){
 		var AI = PlayScene.AI;
-		AI.timer = 60; // after turn started delay
+		AI.timer = 25; // after turn started delay
 		AI.moves = [];
 		AI.nextMove = null;
 	}
@@ -629,11 +629,13 @@ function renderSlot(item,rx,ry,s){
 		{item.fallProgress--;}
 	
 		var itemImg = getImg(item);
-		var imgSize = s - max(item.fallProgress-10, 0)*_(5);
+		var imgSize = s - max(
+			item.fallProgress, 0
+		)*_(5);
 		
 		image(
 			itemImg, 
-			rx, ry - item.fallProgress*_(3), 
+			rx, ry - item.fallProgress*_(6), 
 			imgSize, imgSize
 		);
 	}
@@ -705,7 +707,7 @@ function updateAI(){
 		// not selected, but having moves in queue? set up next move
 		else if (AI.moves.length > 0){
 			AI.nextMove = AI.moves.shift();
-			AI.timer = 90; // showing move delay
+			AI.timer = 40; // showing move delay
 			PlayScene.selectedCardIndex = AI.nextMove.cardIndex;
 			playSound(cardSound);
 		}
@@ -720,7 +722,7 @@ let touchCountDown = 0;
 
 function touchEnded(){
 	if (touchCountDown > 0) return;
-	else touchCountDown = 10;
+	else touchCountDown = 5;
 	
 	if (!CONSTANTS) return;
 
@@ -840,9 +842,9 @@ function setup() {
 		STARTING_BOXES_COUNT: 5,
 		
 		DELAYS: {
-			DRAWING_CARDS: 20, CARD_TRANSITION: 90,
-			BOX_FALL: 30, GLOW_SCORE: 50, SLIDE_CARD: 20,
-			TURN_TEXT: 60, GAMEOVER: 200
+			DRAWING_CARDS: 10, CARD_TRANSITION: 40,
+			BOX_FALL: 10, GLOW_SCORE: 20, SLIDE_CARD: 10,
+			TURN_TEXT: 30, GAMEOVER: 120
 		},
 		ITEM_NAMES: {
 			BOX_BLUE:"BOX_BLUE", BOX_ORANGE:"BOX_ORANGE", 
@@ -954,6 +956,7 @@ function setup() {
 	scene = CONSTANTS.SCENES.WELCOME;
 	justChangedScene = true; // fix click to go back quirk
   
+	frameRate(30);
   	rectMode(CENTER);
 	imageMode(CENTER);
 	textAlign(CENTER, CENTER);
@@ -1021,12 +1024,12 @@ function draw() {
 
 		// render shockwave
 		landingShockwave.timer--;
-		if (landingShockwave.timer <= 0 && landingShockwave.timer > -30){
+		if (landingShockwave.timer <= 0 && landingShockwave.timer > -15){
 			if (landingShockwave.timer === 0){
 				playSound(landingSound);
 			}
 			let renderPos = getRenderPos(landingShockwave.pos);
-			let s = map(landingShockwave.timer, 0, -30, 0, 1);
+			let s = map(landingShockwave.timer, 0, -15, 0, 1);
 			noStroke();
 			fill(255, 255 - (s*255));
 			ellipse(renderPos[0], renderPos[1] + _(30), _(200*s), _(30*s));
@@ -1132,7 +1135,7 @@ function draw() {
 		.filter(function(slideCard){
 			var renderX = _(75) + _(100) * slideCard.index;
 			var renderY;
-			var offsetY = (CONSTANTS.DELAYS.SLIDE_CARD - slideCard.progress)*_(10);
+			var offsetY = (CONSTANTS.DELAYS.SLIDE_CARD - slideCard.progress)*_(15);
 			if (slideCard.isP1){
 				renderY = CONSTANTS.P1_CARDS_Y - offsetY;
 			} else {
@@ -1158,7 +1161,7 @@ function draw() {
 			if (item.timer-- < 0){
 				item.renderPos[0] += item.vel[0];
 				item.renderPos[1] += item.vel[1];
-				item.vel[1] += _(0.7); // gravity
+				item.vel[1] += _(2.1); // gravity
 			}
 			var itemImg = getImg(item);
 			var imgSize = cellSize;
