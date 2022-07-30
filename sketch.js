@@ -251,7 +251,7 @@ function renderBtnCard(btnCard, index, isP1){
 	var renderY = isP1 ? CONSTANTS.P1_CARDS_Y : CONSTANTS.P2_CARDS_Y;
 	// update transition animation
 	if (btnCard.transitionProgress < 90){
-		btnCard.transitionProgress += 4;
+		btnCard.transitionProgress += 5;
 		renderX = CONSTANTS.DRAW_PILE_POS[0] - (CONSTANTS.DRAW_PILE_POS[0] - renderX) * sin(btnCard.transitionProgress);
 		renderY = CONSTANTS.DRAW_PILE_POS[1] - (CONSTANTS.DRAW_PILE_POS[1] - renderY) * sin(btnCard.transitionProgress);
 	}
@@ -448,7 +448,7 @@ function playSelectedCard(){
 			itemImageIndex: itemObj.itemImageIndex,
 			itemName: itemObj.itemName,
 			timer: CONSTANTS.DELAYS.BOX_FALL,
-			vel: [_(random(-5,5)), _(random(-10,-15))],
+			vel: [_(random(-5,5)), _(random(-15,-20))],
 			renderPos: getRenderPos(pos)
 		});
 	});
@@ -635,7 +635,7 @@ function renderSlot(item,rx,ry,s){
 		
 		image(
 			itemImg, 
-			rx, ry - item.fallProgress*_(6), 
+			rx, ry - item.fallProgress*_(8), 
 			imgSize, imgSize
 		);
 	}
@@ -707,7 +707,7 @@ function updateAI(){
 		// not selected, but having moves in queue? set up next move
 		else if (AI.moves.length > 0){
 			AI.nextMove = AI.moves.shift();
-			AI.timer = 40; // showing move delay
+			AI.timer = 30; // showing move delay
 			PlayScene.selectedCardIndex = AI.nextMove.cardIndex;
 			playSound(cardSound);
 		}
@@ -844,7 +844,7 @@ function setup() {
 		DELAYS: {
 			DRAWING_CARDS: 10, CARD_TRANSITION: 40,
 			BOX_FALL: 10, GLOW_SCORE: 20, SLIDE_CARD: 10,
-			TURN_TEXT: 30, GAMEOVER: 120
+			TURN_TEXT: 30, GAMEOVER: 90
 		},
 		ITEM_NAMES: {
 			BOX_BLUE:"BOX_BLUE", BOX_ORANGE:"BOX_ORANGE", 
@@ -1135,7 +1135,7 @@ function draw() {
 		.filter(function(slideCard){
 			var renderX = _(75) + _(100) * slideCard.index;
 			var renderY;
-			var offsetY = (CONSTANTS.DELAYS.SLIDE_CARD - slideCard.progress)*_(15);
+			var offsetY = (CONSTANTS.DELAYS.SLIDE_CARD - slideCard.progress)*_(20);
 			if (slideCard.isP1){
 				renderY = CONSTANTS.P1_CARDS_Y - offsetY;
 			} else {
@@ -1161,7 +1161,7 @@ function draw() {
 			if (item.timer-- < 0){
 				item.renderPos[0] += item.vel[0];
 				item.renderPos[1] += item.vel[1];
-				item.vel[1] += _(2.1); // gravity
+				item.vel[1] += _(3.0); // gravity
 			}
 			var itemImg = getImg(item);
 			var imgSize = cellSize;
