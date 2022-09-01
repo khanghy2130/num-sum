@@ -13,9 +13,7 @@
         display: flex;
         overflow: hidden;
         min-height: 100vh;
-        background-image: url("assets/bg.png");
-        background-repeat: no-repeat;
-        background-size: cover;
+        background-color: rgb(54, 0, 37);
       }
       #overlay {
         width: 100vw;
@@ -33,9 +31,6 @@
       <div id="overlay"></div>
     
 
-  <!-- <script src="p5.js"></script>
-  <script src="p5.sound.min.js" ></script>
-  <script src="sketch.js"></script> -->
   <script>
     function loadScript(src, onload){
       const script = document.createElement('script');
@@ -43,18 +38,9 @@
       script.src = src;
       document.head.appendChild(script);
     }
-    function loadGameScript(){
-      loadScript("sketch.js", ()=>{});
-    }
 
     loadScript("p5.js", ()=>{
-      if (typeof AudioWorklet === "undefined"){
-        loadGameScript();
-      } else {
-        loadScript("p5.sound.min.js", ()=>{
-          loadGameScript();
-        });
-      }
+      loadScript("sketch.js", ()=>{});
     });
     
   </script>
