@@ -1,10 +1,612 @@
 let isPaused = true;
 
+let LAZER_COLOR, GRID_COLOR, HIGHLIGHT_COLOR, PORTAL_A_COLOR, PORTAL_B_COLOR, BG_COLOR;
+let U, LAZER_SIZE, RNODES_MIN, RNODES_MAX;
+
+/* ---HELPERS--- */
+function increaseDir(currentDir, amount){
+    while (amount > 0){
+        amount--;
+        currentDir++;
+        if (currentDir >= 6){
+            currentDir = 0;
+        }
+    }
+    return currentDir;
+}
+function getOppositeDir(dir){
+    return increaseDir(dir, 3);
+}
+function posToKey(pos){
+    return "x"+pos[0] + "y"+pos[1];
+}
+function randomInt(start,end){
+    return floor(random(start,end));
+}
+
+
+/* ---TILES DATA--- */
+var BASE_TILES_DATA = [
+    {x: 5, y: [-5,0]},
+    {x: 4, y: [-5,1]},
+    {x: 3, y: [-5,2]},
+    {x: 2, y: [-5,3]},
+    {x: 1, y: [-5,4]},
+    {x: 0, y: [-5,5]},
+    {x: -1, y: [-4,5]},
+    {x: -2, y: [-3,5]},
+    {x: -3, y: [-2,5]},
+    {x: -4, y: [-1,5]},
+    {x: -5, y: [0,5]}
+];
+var BASE_TILES = [];
+// {pos,nodeInfo{name,nodeItem}}
+var BASE_TILES_OBJECT = {};
+BASE_TILES_DATA.forEach(function(obj) {
+	for (var i=obj.y[0]; i <= obj.y[1]; i++){
+		BASE_TILES.push([obj.x, i]);
+	}
+});
+
+var SAFE_TILES_DATA = [
+    {x: 3, y: [-4,1]},
+    {x: 2, y: [-4,2]},
+    {x: 1, y: [-3,2]},
+    {x: 0, y: [-2,2]},
+    {x: -1, y: [-2,3]},
+    {x: -2, y: [-2,4]},
+    {x: -3, y: [-1,4]}
+];
+var SAFE_TILES = [];
+SAFE_TILES_DATA.forEach(function(obj) {
+	for (var i=obj.y[0]; i <= obj.y[1]; i++){
+		SAFE_TILES.push([obj.x, i]);
+	}
+});
+
+
+/* ---LOGIC--- */
+var isGenerating = true;
+var hoveredNode = null;
+var hasWon = false;
+
+var NODE_NAMES = {
+    SOURCE: "S",
+    REDIRECT: "R",
+    PORTAL: "P"
+};
+
+// S{pos, dir},  P{pos, otherPortal}
+var sourceNode, portalA1, portalA2, portalB1, portalB2;
+var portalsList = [];
+// R{pos, dir1, dir2, lazerIndex(-1 means no lazer)}
+var redirectNodes = [];
+var lazerData = [];
+
+var DIR_VELS = [
+    // u, ul, dl, d, dr, ur
+    [0,-1],
+    [-1,0],
+    [-1,1],
+    [0,1],
+    [1,0],
+    [1,-1]
+];
+
+// takes current node item (pos, dir) and returns next pos
+function getNextTilePos(pos, dir){
+    return [
+        pos[0] + DIR_VELS[dir][0],
+        pos[1] + DIR_VELS[dir][1]
+    ];
+}
+
+function isInBlacklist(pos, blacklist){
+    return blacklist.some(function(bPos){
+        return pos[0] === bPos[0] && pos[1] === bPos[1];
+    });
+}
+function getRandomPos(pool, blacklist){
+    var finalPos;
+    while(!finalPos) {
+       finalPos = pool[randomInt(0,pool.length)];
+       // check if match any in black list
+       if (isInBlacklist(finalPos, blacklist)){
+           finalPos = null;
+       }
+    }
+    return finalPos;
+}
+
+function getSurroundingPosArray(pos){
+    var posArray = [];
+    DIR_VELS.forEach(function(vel){
+        var newPos = [pos[0] + vel[0], pos[1] + vel[1]];
+        var tileInfo = BASE_TILES_OBJECT[posToKey(newPos)];
+        // if within grid
+        if (tileInfo){
+            // if doesnt have any node
+            if (tileInfo.nodeInfo === null){
+                posArray.push(newPos);
+            }
+        }
+    });
+    return posArray;
+}
+
+function generatePortals(){
+    var fourPortalPos = [];
+    var blacklist = [sourceNode.pos]; // no-spawn pos array
+    blacklist = blacklist.concat(
+        getSurroundingPosArray(sourceNode.pos)
+    );
+    while (fourPortalPos.length < 4){
+        var newRandomPos = getRandomPos(SAFE_TILES, blacklist);
+        fourPortalPos.push(newRandomPos);
+        // add to blacklist
+        var newBlacklist = getSurroundingPosArray(newRandomPos);
+        blacklist.push(newRandomPos);
+        blacklist = blacklist.concat(newBlacklist);
+    }
+    
+    // set pos and add to dictionary
+    portalsList.forEach(function (portal, i){
+        portal.pos = fourPortalPos[i];
+        BASE_TILES_OBJECT[posToKey(portal.pos)].nodeInfo = {
+            name: NODE_NAMES.PORTAL,
+            nodeItem: portal
+        };
+    });
+}
+
+// return false if unsuccessful
+function generateRNodes(){
+    var blacklist = [sourceNode.pos];
+    // sNode surrounding
+    blacklist = blacklist.concat(
+        getSurroundingPosArray(sourceNode.pos)
+    );
+    // portals
+    blacklist = blacklist.concat(
+        portalsList.map(function(portal){
+            return portal.pos;
+        })
+    );
+    
+    var currentPos = sourceNode.pos;
+    // clear after each rNode creation
+    var possibleMoves = []; // {dir from currentPos, pos, distance}
+    
+    // each dir, returns true if leads to source
+    function addPossibleMoves(dir){
+        var movingPos = currentPos; // moves along current dir
+        var distanceCount = 0;
+        var lazerPosArray = []; // pos array
+        
+        // keep going until out of grid or hit rNode/sNode
+        while (true){
+            distanceCount++;
+            movingPos = getNextTilePos(movingPos, dir);
+            
+            var currentTileInfo = BASE_TILES_OBJECT[
+                posToKey(movingPos)
+            ];
+            // if out of grid then stop
+            if (!currentTileInfo){break;}
+            // if pos is empty then add
+            else if (currentTileInfo.nodeInfo === null){
+                // check if pos is not in blacklist
+                if (!isInBlacklist(movingPos, blacklist)){
+                    // add move (multiple copies)
+                    var newMove = {
+                        pos: movingPos,
+                        dir: dir,
+                        lazerPosArray: lazerPosArray.slice(0)
+                    };
+                    for (var i=0; i<distanceCount; i++){
+                        possibleMoves.push(newMove);
+                    }
+                    // for next moves, this pos is on lazer path
+                    lazerPosArray.push(movingPos);
+                }
+            }
+            // pos is not empty (could be s/r/portal)
+            else {
+                var nodeInfo = currentTileInfo.nodeInfo;
+                // if pos is portal
+                if (nodeInfo.name === NODE_NAMES.PORTAL){
+                    movingPos = nodeInfo.nodeItem
+                    .otherPortal.pos;
+                }
+                // if pos is rNode then stop
+                else if (nodeInfo.name === NODE_NAMES.REDIRECT){
+                    break;
+                }
+                // if pos is sNode then return true
+                else if (nodeInfo.name === NODE_NAMES.SOURCE){
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    // for each rNode to be created
+    // keep going until stuck (no possible move) or enough rNodes
+    while (true){
+        var dirThatLeadsToSource = null;
+        // go thru all dirs to add possible moves
+        for (var i=0; i < DIR_VELS.length; i++){
+            // don't do current dir or opposite
+            if (redirectNodes.length > 0){
+                var lastRNode = redirectNodes[
+                    redirectNodes.length-1
+                ];
+                if (lastRNode.dir1 === i ||
+                getOppositeDir(lastRNode.dir1) === i){
+                    continue;
+                }
+            }
+            
+            var doesLeadToSource = addPossibleMoves(i);
+            if (doesLeadToSource){
+                dirThatLeadsToSource = i;
+            }
+        }
+        
+        // if enough rNodes
+        if (redirectNodes.length >= RNODES_MIN){
+            //  stop if does lead to source
+            if (dirThatLeadsToSource !== null){
+                var lastRNode = redirectNodes[
+                    redirectNodes.length-1
+                ];
+                // also add dir2 to last rNode
+                lastRNode.dir2 = dirThatLeadsToSource;
+                break;
+            }
+        }
+        
+        
+        
+
+        // stuck? regenerate
+        if (possibleMoves.length === 0){ return false;}
+        else {
+            // pick a move {pos, dir, lazerPosArray}
+            var pickedMove = possibleMoves[randomInt(
+                0, possibleMoves.length
+            )];
+            possibleMoves = []; // reset
+            
+            // set dir2 of current rNode if has any rNode
+            if (redirectNodes.length > 0){
+                redirectNodes[
+                    redirectNodes.length-1
+                ].dir2 = pickedMove.dir;
+            }
+            
+            var newRNode = {
+                pos: pickedMove.pos,
+                dir1: getOppositeDir(pickedMove.dir),
+                dir2: null,
+                lazerIndex: -1
+            };
+            // add to rNodes list
+            redirectNodes.push(newRNode);
+            // add to dictionary
+            BASE_TILES_OBJECT[posToKey(newRNode.pos)]
+            .nodeInfo = {
+                name: NODE_NAMES.REDIRECT,
+                nodeItem: newRNode
+            };
+            
+            // add lazer pos array to blacklist
+            blacklist = blacklist.concat(pickedMove.lazerPosArray);
+            // add surround tiles to blacklist
+            for (var i=0; i<DIR_VELS.length; i++){
+                var neighborPos = getNextTilePos(newRNode.pos, i);
+                blacklist.push(neighborPos);
+            }
+            
+            currentPos = newRNode.pos;
+        }
+    }
+    
+    return true;
+}
+
+function newPuzzle(){
+    // reset data
+    hoveredNode = null;
+    hasWon = false;
+    lazerData = [];
+    redirectNodes = [];
+    
+    portalA1 = {};
+    portalA2 = {};
+    portalB1 = {};
+    portalB2 = {};
+    portalA1.otherPortal = portalA2;
+    portalA2.otherPortal = portalA1;
+    portalB1.otherPortal = portalB2;
+    portalB2.otherPortal = portalB1;
+    portalsList = [portalA1, portalA2, portalB1, portalB2];
+    
+    // set up map dictionary
+    BASE_TILES.forEach(function(pos){
+        BASE_TILES_OBJECT[posToKey(pos)] = {
+            pos: pos,
+            nodeInfo: null
+        };
+    });
+    
+    // generate source node
+    sourceNode = {
+        pos: getRandomPos(SAFE_TILES, []),
+        // pos: [0,1],
+        dir: randomInt(0,6)
+    };
+    // set sNode to dictionary
+    BASE_TILES_OBJECT[posToKey(sourceNode.pos)].nodeInfo = {
+        name: NODE_NAMES.SOURCE,
+        nodeItem: sourceNode
+    };
+    
+    generatePortals(); // generate portals
+    
+    // rNodes. regenerate (false) if unsuccessful
+    isGenerating = !generateRNodes();
+    
+    // fail if too many rNodes
+    if (redirectNodes.length > RNODES_MAX){
+        isGenerating = true;
+    }
+    
+    // scramble rotatable nodes
+    if (!isGenerating){
+        redirectNodes.forEach(function(rNode){
+            var rotateAmount = randomInt(0,5);
+            for (var i=0; i < rotateAmount;i ++){
+                rNode.dir1 = increaseDir(rNode.dir1, 1);
+                rNode.dir2 = increaseDir(rNode.dir2, 1);
+            }
+        });
+    }
+}
+
+
+function getCurrentLazerData(){
+    if (lazerData.length === 0){
+        return sourceNode;
+    } else {
+        return lazerData[lazerData.length-1];
+    }
+}
+
+var lazerHits = {
+    rNode: function(rNode){
+        var currentLazerData = getCurrentLazerData();
+        var entranceDir = getOppositeDir(currentLazerData.dir);
+        var outputDir;
+        if (entranceDir === rNode.dir1){
+            outputDir = rNode.dir2;
+        } else if (entranceDir === rNode.dir2){
+            outputDir = rNode.dir1;
+        }
+        // if lazer successfully enters this rNode
+        if (typeof outputDir === "number"){
+            rNode.lazerIndex = lazerData.length;
+            // add an invisible lazer right on this rNode
+            lazerData.push({
+                pos: rNode.pos,
+                dir: outputDir
+            });
+        }
+    },
+    portal: function(portal){
+        var currentLazerData = getCurrentLazerData();
+        lazerData.push({
+            pos: portal.otherPortal.pos,
+            dir: currentLazerData.dir
+        });
+    },
+    sNode: function(sNode){
+        hasWon = redirectNodes.every(function(rNode){
+            return rNode.lazerIndex !== -1;
+        });
+    }
+};
+
+// move lazer forward
+function updateLazer(){
+    hasWon = false; // reset
+    var currentLazerData = getCurrentLazerData();
+    
+    var nextTilePos = getNextTilePos(
+        currentLazerData.pos, currentLazerData.dir
+    );
+    var nextTileInfo = BASE_TILES_OBJECT[posToKey(nextTilePos)];
+    
+    // check if is within grid
+    if ( nextTileInfo ){
+        // check if is empty
+        if (!nextTileInfo.nodeInfo){
+            // move lazer forward
+            lazerData.push({
+                pos: nextTilePos,
+                dir: currentLazerData.dir
+            });
+        } else {
+            var nodeItem = nextTileInfo.nodeInfo.nodeItem;
+            switch (nextTileInfo.nodeInfo.name){
+                case NODE_NAMES.REDIRECT:
+                    lazerHits.rNode(nodeItem);
+                    break;
+                case NODE_NAMES.PORTAL:
+                    lazerHits.portal(nodeItem);
+                    break;
+                case NODE_NAMES.SOURCE:
+                    lazerHits.sNode(nodeItem);
+                    break;
+            }
+        }
+    }
+}
+
+/* ---RENDER--- */
+let offset,TILE_SCALE,HOVER_RANGE,SQRT_3 ,HALF_SQRT_3 ,HALF_TILE_SCALE ,SCALED_SQRT;
+
+function getRenderPos(pos){
+    return [offset[0] + pos[0] * TILE_SCALE * 3 / 2, 
+    offset[1] + (pos[1] * 2 + pos[0]) * SCALED_SQRT];
+}
+
+// returns the end point position of the line segment
+function getLineEndPos(pos, dir){
+    var renderPos = getRenderPos(pos);
+    var x = renderPos[0], y = renderPos[1];
+    var CALCULATED_X_OFFSET = TILE_SCALE*0.75;
+    var CALCULATED_Y_OFFSET = SCALED_SQRT/2;
+    
+    switch (dir){
+        case 0:
+            return [
+                x, y - SCALED_SQRT
+            ];
+        case 1:
+            return [
+                x - CALCULATED_X_OFFSET, y - CALCULATED_Y_OFFSET
+            ];
+        case 2:
+            return [
+                x - CALCULATED_X_OFFSET, y + CALCULATED_Y_OFFSET
+            ];
+        case 3:
+            return [
+                x, y + SCALED_SQRT
+            ];
+        case 4:
+            return [
+                x + CALCULATED_X_OFFSET, y + CALCULATED_Y_OFFSET
+            ];
+        case 5:
+            return [
+                x + CALCULATED_X_OFFSET, y - CALCULATED_Y_OFFSET
+            ];
+    }
+    
+    return [0,0]; // unknown dir
+}
+
+function renderTile(pos){
+    var renderPos = getRenderPos(pos);
+    var x = renderPos[0], y = renderPos[1];
+    
+    beginShape();
+    vertex(x + TILE_SCALE, y);
+    vertex(x + HALF_TILE_SCALE, y + SCALED_SQRT);
+    vertex(x - HALF_TILE_SCALE, y + SCALED_SQRT);
+    vertex(x - TILE_SCALE, y);
+    vertex(x - HALF_TILE_SCALE, y - SCALED_SQRT);
+    vertex(x + HALF_TILE_SCALE, y - SCALED_SQRT);
+    endShape(CLOSE);
+}
+function tileIsHovered(pos){
+    var renderPos = getRenderPos(pos);
+    var x = renderPos[0], y = renderPos[1];
+    return dist(mouseX, mouseY, x, y) < HOVER_RANGE;
+}
+
+
+function renderGrid(){
+    strokeWeight(1.5*U);
+    stroke(GRID_COLOR);
+    noFill();
+    BASE_TILES.forEach(function(pos){
+        renderTile(pos);
+    });
+}
+
+function renderAllLazer(){
+    strokeWeight(LAZER_SIZE);
+    stroke(hasWon? HIGHLIGHT_COLOR : LAZER_COLOR);
+    lazerData.forEach(function(lazerItem, i){
+        var end1 = getLineEndPos(lazerItem.pos, lazerItem.dir);
+        var end2 = getLineEndPos(lazerItem.pos, 
+        getOppositeDir(lazerItem.dir));
+        // don't render if already has something there
+        if (!BASE_TILES_OBJECT[
+            posToKey(lazerItem.pos)
+        ].nodeInfo){
+            line(end1[0], end1[1], end2[0], end2[1]);
+        }
+        
+        // particles
+        if (i === lazerData.length - 1){
+            strokeWeight(LAZER_SIZE*0.4);
+            for (var amount=0; amount < 8; amount++){
+                point(end1[0] + random(-1,1)*LAZER_SIZE, 
+                end1[1] + random(-1,1)*LAZER_SIZE);
+            }
+        }
+    });
+}
+
+function renderSourceNode(){
+    fill(hasWon? HIGHLIGHT_COLOR : LAZER_COLOR);
+    noStroke();
+    renderTile(sourceNode.pos);
+    if (tileIsHovered(sourceNode.pos)){
+        hoveredNode = sourceNode;
+    }
+}
+
+function renderRedirectNodes(){
+    redirectNodes.forEach(function(rNode){
+        // gray hex background
+        fill(GRID_COLOR);
+        noStroke();
+        renderTile(rNode.pos);
+        
+        strokeWeight(LAZER_SIZE);
+        // lazer color lines if has lazerIndex > -1
+        if (rNode.lazerIndex > -1){
+            stroke(hasWon? HIGHLIGHT_COLOR : LAZER_COLOR);
+        } else {
+            stroke(BG_COLOR);
+        }
+        var centerPos = getRenderPos(rNode.pos);
+        var end1 = getLineEndPos(rNode.pos, rNode.dir1);
+        var end2 = getLineEndPos(rNode.pos, rNode.dir2);
+        line(centerPos[0], centerPos[1], end1[0], end1[1]);
+        line(centerPos[0], centerPos[1], end2[0], end2[1]);
+        
+        if (tileIsHovered(rNode.pos)){
+            hoveredNode = rNode;
+        }
+    });
+}
+
+function renderPortals(){
+    noFill();
+    strokeWeight(7*U);
+    portalsList.forEach(function (portal, i){
+        stroke(i < 2 ? PORTAL_A_COLOR : PORTAL_B_COLOR);
+        var centerPos = getRenderPos(portal.pos);
+        ellipse(centerPos[0], centerPos[1], 
+        TILE_SCALE*1.3, TILE_SCALE*1.3);
+        ellipse(centerPos[0], centerPos[1], 
+        TILE_SCALE*0.5, TILE_SCALE*0.5);
+    });
+}
+
+
 
 
 let CANVAS_WIDTH, HEIGHT_RATIO;
 function setup(){
-	HEIGHT_RATIO = 1.3;
+	HEIGHT_RATIO = 1.15;
 	CANVAS_WIDTH = min(
 		document.documentElement.clientWidth,
 		document.documentElement.clientHeight/HEIGHT_RATIO
@@ -14,23 +616,132 @@ function setup(){
 		CANVAS_WIDTH*HEIGHT_RATIO
 	).parent("overlay");
 
+	LAZER_COLOR = color(41, 255, 148);
+	GRID_COLOR = color(250, 118, 186);
+	HIGHLIGHT_COLOR = color(255, 255, 255);
+	PORTAL_A_COLOR = color(41, 255, 251);
+	PORTAL_B_COLOR = color(255, 200, 43);
+	BG_COLOR = color(54, 0, 37);
 
+	U = width/600;
+	LAZER_SIZE = U*12;
+	RNODES_MIN = 1;
+	RNODES_MAX = 40;
 
+	offset = [width/2, height/2];
+	TILE_SCALE = U*34;
+	HOVER_RANGE = TILE_SCALE * 0.8;
+	SQRT_3 = sqrt(3);
+	HALF_SQRT_3 = SQRT_3 / 2;
+	HALF_TILE_SCALE = TILE_SCALE / 2;
+	SCALED_SQRT = HALF_SQRT_3 * TILE_SCALE;
+
+	textFont(mainFont);
+	frameRate(30);
+	textAlign(CENTER, CENTER);
+	rectMode(CENTER);
+	angleMode(DEGREES);
+	
+	Rune.init({
+		resumeGame: function () {
+			isPaused = false;
+		},
+		pauseGame: function () {
+			isPaused = true;
+		},
+		restartGame: function () {
+			/////////////////// reset
+		},
+		getScore: function () {
+			return max(0, 123);
+		}
+	});
 }
 
 
 
 function draw(){
 	touchCountdown--;
-	background(0);
+	if (isPaused) return;
+	if (isGenerating){
+        background(BG_COLOR);
+		strokeWeight(U*10);
+        stroke(GRID_COLOR);
+		noFill();
+		const t = frameCount*10;
+        arc(width/2, height/2, U*100, U*100, t, t + 200);
+
+		newPuzzle();
+        return;
+    }
+    
+    
+    hoveredNode = null;
+    background(BG_COLOR);
+
+    renderGrid();
+    renderSourceNode();
+    renderRedirectNodes();
+    renderPortals();
+    renderAllLazer();
+   
+    updateLazer();
+    
+    if (hasWon){
+		noFill();
+		stroke(GRID_COLOR);
+		rect(U*500, U*50, U*80, U*60);
+        textSize(40*U);
+        fill(GRID_COLOR);
+        text(">>>", U*500, U*50);
+    }
 }
 
+function clearRNodes(){
+    redirectNodes.forEach(function (rNode){
+        if (lazerData.length <= rNode.lazerIndex){
+            rNode.lazerIndex = -1;
+        }
+    });
+}
 
 let touchCountdown = 0;
 function touchEnded(){
 	if (touchCountdown > 0) return;
 	else touchCountdown = 3;
 
+	if (hoveredNode){
+        if (hoveredNode === sourceNode){
+            // sNode
+            sourceNode.dir = increaseDir(sourceNode.dir, 1);
+            lazerData = [];
+            clearRNodes();
+        } else {
+            // rNode
+            var rNode = hoveredNode;
+            if (rNode.lazerIndex !== -1){
+                // lazer is hitting
+                lazerData = lazerData.slice(0, rNode.lazerIndex);
+                rNode.lazerIndex = -1;
+                var entranceDir = getOppositeDir(
+                    getCurrentLazerData().dir
+                );
+                do {
+                    rNode.dir1 = increaseDir(rNode.dir1, 1);
+                    rNode.dir2 = increaseDir(rNode.dir2, 1);
+                } while (rNode.dir1 !== entranceDir &&
+                rNode.dir2 !== entranceDir);
+            } else {
+                // free rotate
+                rNode.dir1 = increaseDir(rNode.dir1, 1);
+                rNode.dir2 = increaseDir(rNode.dir2, 1);
+            }
+            clearRNodes();
+        }
+    }
+}
 
-	
+let mainFont;
+function preload(){
+	mainFont = loadFont('./Minecraft.ttf');
 }
