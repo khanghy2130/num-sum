@@ -1,5 +1,15 @@
 let isPaused = true;
 
+const LEVELS = [
+    [4,5],
+    [6,8],
+    [9,11],
+    [12,14],
+    [15,99],
+    [15,99]
+];
+let lvIndex = 0;
+
 let LAZER_COLOR, GRID_COLOR, HIGHLIGHT_COLOR, PORTAL_A_COLOR, PORTAL_B_COLOR, BG_COLOR;
 let U, LAZER_SIZE, RNODES_MIN, RNODES_MAX;
 
@@ -106,14 +116,17 @@ function isInBlacklist(pos, blacklist){
         return pos[0] === bPos[0] && pos[1] === bPos[1];
     });
 }
-function getRandomPos(pool, blacklist){
+function getRandomPos(pool, blacklist, isDeterministic){
     var finalPos;
     while(!finalPos) {
-       finalPos = pool[randomInt(0,pool.length)];
-       // check if match any in black list
-       if (isInBlacklist(finalPos, blacklist)){
-           finalPos = null;
-       }
+        if (isDeterministic){
+            finalPos = pool[floor(Rune.deterministicRandom()*pool.length)];
+        }
+        else finalPos = pool[randomInt(0,pool.length)];
+        // check if match any in black list
+        if (isInBlacklist(finalPos, blacklist)){
+            finalPos = null;
+        }
     }
     return finalPos;
 }
@@ -134,29 +147,21 @@ function getSurroundingPosArray(pos){
     return posArray;
 }
 
+let portalsBlacklist = [];
+let fourPortalPos = [];
 function generatePortals(){
-    var fourPortalPos = [];
-    var blacklist = [sourceNode.pos]; // no-spawn pos array
-    blacklist = blacklist.concat(
-        getSurroundingPosArray(sourceNode.pos)
-    );
+    var blacklist = []; // no-spawn pos array
+
     while (fourPortalPos.length < 4){
-        var newRandomPos = getRandomPos(SAFE_TILES, blacklist);
+        var newRandomPos = getRandomPos(SAFE_TILES, blacklist, true);
         fourPortalPos.push(newRandomPos);
         // add to blacklist
         var newBlacklist = getSurroundingPosArray(newRandomPos);
         blacklist.push(newRandomPos);
         blacklist = blacklist.concat(newBlacklist);
     }
-    
-    // set pos and add to dictionary
-    portalsList.forEach(function (portal, i){
-        portal.pos = fourPortalPos[i];
-        BASE_TILES_OBJECT[posToKey(portal.pos)].nodeInfo = {
-            name: NODE_NAMES.PORTAL,
-            nodeItem: portal
-        };
-    });
+
+    portalsBlacklist = blacklist; // globalize
 }
 
 // return false if unsuccessful
@@ -316,35 +321,46 @@ function generateRNodes(){
     return true;
 }
 
-function newPuzzle(){
-    // reset data
-    hoveredNode = null;
-    hasWon = false;
-    lazerData = [];
-    redirectNodes = [];
-    
-    portalA1 = {};
-    portalA2 = {};
-    portalB1 = {};
-    portalB2 = {};
-    portalA1.otherPortal = portalA2;
-    portalA2.otherPortal = portalA1;
-    portalB1.otherPortal = portalB2;
-    portalB2.otherPortal = portalB1;
-    portalsList = [portalA1, portalA2, portalB1, portalB2];
-    
-    // set up map dictionary
+function resetGame(){
+    gameEnded = false;
+    lvIndex = -1;
+    startTime = (new Date()).getTime();
+    playedTime = 0;
+    nextLevel();
+}
+
+function resetBaseTiles(){
     BASE_TILES.forEach(function(pos){
         BASE_TILES_OBJECT[posToKey(pos)] = {
             pos: pos,
             nodeInfo: null
         };
     });
+}
+
+function newPuzzle(){
+    // reset data for next level
+    hoveredNode = null;
+    hasWon = false;
+    isSolved = false;
+    lazerData = [];
+    redirectNodes = [];
+    
+    // set up map dictionary
+    resetBaseTiles();
+
+    // portals: set pos and add to dictionary
+    portalsList.forEach(function (portal, i){
+        portal.pos = fourPortalPos[i];
+        BASE_TILES_OBJECT[posToKey(portal.pos)].nodeInfo = {
+            name: NODE_NAMES.PORTAL,
+            nodeItem: portal
+        };
+    });
     
     // generate source node
     sourceNode = {
-        pos: getRandomPos(SAFE_TILES, []),
-        // pos: [0,1],
+        pos: getRandomPos(SAFE_TILES, portalsBlacklist),
         dir: randomInt(0,6)
     };
     // set sNode to dictionary
@@ -352,8 +368,6 @@ function newPuzzle(){
         name: NODE_NAMES.SOURCE,
         nodeItem: sourceNode
     };
-    
-    generatePortals(); // generate portals
     
     // rNodes. regenerate (false) if unsuccessful
     isGenerating = !generateRNodes();
@@ -601,9 +615,34 @@ function renderPortals(){
     });
 }
 
+let realScore = 0;
+let gameEnded = false;
+function nextLevel(){
+    // last level ?
+    if (lvIndex >= 5){
+        if (!gameEnded){
+            realScore = 1000 - floor(playedTime/1000);
+            Rune.gameOver();
+            gameEnded = true;
+        }
+        return;
+    }
+    
+    startTime = (new Date()).getTime();
+    lvIndex++;
+    isGenerating = true;
+    loadCountdown = MINIMAL_LOADTIME;
+    RNODES_MIN = LEVELS[lvIndex][0];
+    RNODES_MAX = LEVELS[lvIndex][1];
+    newPuzzle();
+}
 
+let startTime; // in ms
+let playedTime; // in ms
 
-
+let loadCountdown;
+const MINIMAL_LOADTIME = 10;
+let gridImage;
 let CANVAS_WIDTH, HEIGHT_RATIO;
 function setup(){
 	HEIGHT_RATIO = 1.15;
@@ -642,18 +681,39 @@ function setup(){
 	rectMode(CENTER);
 	angleMode(DEGREES);
 	
+    // set up portals
+    portalA1 = {};
+    portalA2 = {};
+    portalB1 = {};
+    portalB2 = {};
+    portalA1.otherPortal = portalA2;
+    portalA2.otherPortal = portalA1;
+    portalB1.otherPortal = portalB2;
+    portalB2.otherPortal = portalB1;
+    portalsList = [portalA1, portalA2, portalB1, portalB2];
+
+    resetBaseTiles();
+    generatePortals();
+
+    // take grid image
+    renderGrid();
+    gridImage = get(0,0,width,height);
+
+    resetGame();
+
 	Rune.init({
 		resumeGame: function () {
+            startTime = (new Date()).getTime();
 			isPaused = false;
 		},
 		pauseGame: function () {
 			isPaused = true;
 		},
 		restartGame: function () {
-			/////////////////// reset
+			resetGame();
 		},
 		getScore: function () {
-			return max(0, 123);
+			return max(0, realScore);
 		}
 	});
 }
@@ -662,24 +722,34 @@ function setup(){
 
 function draw(){
 	touchCountdown--;
-	if (isPaused) return;
+	if (isPaused) {
+        clear();
+        textSize(80*U);
+        fill(GRID_COLOR);
+        noStroke();
+        text("PAUSED", width/2, height/2);
+        return;
+    }
 	if (isGenerating){
-        background(BG_COLOR);
-		strokeWeight(U*10);
+		newPuzzle();
+    }
+    if (loadCountdown > 0 || isGenerating){
+        loadCountdown--;
+        startTime = (new Date()).getTime();
+        clear();
+        strokeWeight(U*10);
         stroke(GRID_COLOR);
 		noFill();
-		const t = frameCount*10;
+		const t = frameCount*15;
         arc(width/2, height/2, U*100, U*100, t, t + 200);
-
-		newPuzzle();
         return;
     }
     
     
     hoveredNode = null;
-    background(BG_COLOR);
+    clear();
 
-    renderGrid();
+    image(gridImage, 0,0, width, height);
     renderSourceNode();
     renderRedirectNodes();
     renderPortals();
@@ -687,13 +757,35 @@ function draw(){
    
     updateLazer();
     
-    if (hasWon){
+
+    textSize(40*U);
+    strokeWeight(U*5);
+    fill(GRID_COLOR);
+    noStroke();
+    text((lvIndex+1)+"/6", U*80, U*630); // level text
+
+    if (hasWon) {
+        isSolved = true;
+    }
+    // timer text
+    if (!isSolved){ // not solved yet? add time
+        const newTime = (new Date()).getTime();
+        playedTime += newTime - startTime;
+        startTime = newTime;
+    }
+    let displaySec = floor(playedTime/1000) % 60;
+    let displayMin = floor(playedTime/60000);
+    if (displaySec < 10) displaySec = "0" + displaySec;
+    text(`${displayMin}:${displaySec}`, U*80, U*60);
+
+    // next button
+    if (isSolved){
 		noFill();
 		stroke(GRID_COLOR);
-		rect(U*500, U*50, U*80, U*60);
-        textSize(40*U);
+		rect(U*520, U*60, U*80, U*60);
         fill(GRID_COLOR);
-        text(">>>", U*500, U*50);
+        noStroke();
+        text(">>>", U*520, U*60);
     }
 }
 
@@ -709,7 +801,6 @@ let touchCountdown = 0;
 function touchEnded(){
 	if (touchCountdown > 0) return;
 	else touchCountdown = 3;
-
 	if (hoveredNode){
         if (hoveredNode === sourceNode){
             // sNode
@@ -737,6 +828,13 @@ function touchEnded(){
                 rNode.dir2 = increaseDir(rNode.dir2, 1);
             }
             clearRNodes();
+        }
+    }
+    // next button
+    else if (isSolved){
+        if (abs(520*U - mouseX) < 40*U &&
+        abs(60*U - mouseY) < 30*U){
+            nextLevel();
         }
     }
 }
