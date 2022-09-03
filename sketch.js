@@ -338,6 +338,7 @@ function resetBaseTiles(){
     });
 }
 
+let isSolved = false;
 function newPuzzle(){
     // reset data for next level
     hoveredNode = null;
