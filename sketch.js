@@ -325,8 +325,9 @@ function generateRNodes(){
 function resetGame(){
     gameEnded = false;
     lvIndex = -1;
-    startTime = (new Date()).getTime();
-    playedTime = 0;
+    // startTime = (new Date()).getTime();
+    // playedTime = 0;
+    movesRemaining = 1000;
     nextLevel();
 }
 
@@ -623,14 +624,15 @@ function nextLevel(){
     // last level ?
     if (lvIndex >= 5){
         if (!gameEnded){
-            realScore = 1000 - floor(playedTime/1000);
+            //realScore = 1000 - floor(playedTime/1000);
+            realScore = movesRemaining;
             Rune.gameOver();
             gameEnded = true;
         }
         return;
     }
     
-    startTime = (new Date()).getTime();
+    //startTime = (new Date()).getTime();
     lvIndex++;
     isGenerating = true;
     loadCountdown = MINIMAL_LOADTIME;
@@ -639,8 +641,9 @@ function nextLevel(){
     newPuzzle();
 }
 
-let startTime; // in ms
-let playedTime; // in ms
+//let startTime; // in ms
+//let playedTime; // in ms
+let movesRemaining;
 
 let loadCountdown;
 const MINIMAL_LOADTIME = 10;
@@ -705,7 +708,7 @@ function setup(){
 
 	Rune.init({
 		resumeGame: function () {
-            startTime = (new Date()).getTime();
+            //startTime = (new Date()).getTime();
 			isPaused = false;
             showTitle = false;
 		},
@@ -743,7 +746,7 @@ function draw(){
     }
     if (loadCountdown > 0 || isGenerating){
         loadCountdown--;
-        startTime = (new Date()).getTime();
+        //startTime = (new Date()).getTime();
         clear();
         strokeWeight(U*10);
         stroke(GRID_COLOR);
@@ -775,6 +778,7 @@ function draw(){
     if (hasWon) {
         isSolved = true;
     }
+    /*
     // timer text
     if (!isSolved){ // not solved yet? add time
         const newTime = (new Date()).getTime();
@@ -785,6 +789,8 @@ function draw(){
     let displayMin = floor(playedTime/60000);
     if (displaySec < 10) displaySec = "0" + displaySec;
     text(`${displayMin}:${displaySec}`, U*80, U*60);
+    */
+    text(movesRemaining, U*80, U*60);
 
     // next button
     if (isSolved){
@@ -810,6 +816,10 @@ function touchEnded(){
 	if (touchCountdown > 0) return;
 	else touchCountdown = 3;
 	if (hoveredNode){
+        // decrease moves
+        if (!isSolved){
+            movesRemaining = max(0, movesRemaining - 1);
+        }
         if (hoveredNode === sourceNode){
             // sNode
             sourceNode.dir = increaseDir(sourceNode.dir, 1);
