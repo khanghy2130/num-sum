@@ -728,6 +728,7 @@ function setup(){
 
 function draw(){
 	touchCountdown--;
+    /*
 	if (isPaused) {
         clear();
         textSize(100*U);
@@ -741,6 +742,7 @@ function draw(){
         }
         return;
     }
+    */
 	if (isGenerating){
 		newPuzzle();
     }
