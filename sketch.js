@@ -1,8 +1,9 @@
 let isPaused = true;
+let showTitle = true;
 
 const LEVELS = [
-    [4,5],
-    [6,8],
+    [4,4],
+    [6,7],
     [9,11],
     [12,14],
     [15,99],
@@ -670,7 +671,7 @@ function setup(){
 
 	offset = [width/2, height/2];
 	TILE_SCALE = U*34;
-	HOVER_RANGE = TILE_SCALE * 0.8;
+	HOVER_RANGE = TILE_SCALE * 1.1;
 	SQRT_3 = sqrt(3);
 	HALF_SQRT_3 = SQRT_3 / 2;
 	HALF_TILE_SCALE = TILE_SCALE / 2;
@@ -706,6 +707,7 @@ function setup(){
 		resumeGame: function () {
             startTime = (new Date()).getTime();
 			isPaused = false;
+            showTitle = false;
 		},
 		pauseGame: function () {
 			isPaused = true;
@@ -725,10 +727,15 @@ function draw(){
 	touchCountdown--;
 	if (isPaused) {
         clear();
-        textSize(80*U);
+        textSize(100*U);
         fill(GRID_COLOR);
         noStroke();
-        text("PAUSED", width/2, height/2);
+        if (showTitle){
+            text("LAZER\nLOOP", width/2, height/2);
+        }
+        else {
+            text("PAUSED", width/2, height/2);
+        }
         return;
     }
 	if (isGenerating){
