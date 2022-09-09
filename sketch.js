@@ -325,9 +325,7 @@ function generateRNodes(){
 function resetGame(){
     gameEnded = false;
     lvIndex = -1;
-    // startTime = (new Date()).getTime();
-    // playedTime = 0;
-    movesRemaining = 1000;
+    realScore = 0;
     nextLevel();
 }
 
@@ -545,6 +543,10 @@ function renderGrid(){
     });
 }
 
+let lazerParticles = []; // array of [x,y,vx,vy]
+const PARTICLES_ADDITION = 2;
+const PARTICLES_LIMIT = 25;
+
 function renderAllLazer(){
     strokeWeight(LAZER_SIZE);
     stroke(hasWon? HIGHLIGHT_COLOR : LAZER_COLOR);
@@ -559,15 +561,31 @@ function renderAllLazer(){
             line(end1[0], end1[1], end2[0], end2[1]);
         }
         
-        // particles
+        // add particles
         if (i === lazerData.length - 1){
-            strokeWeight(LAZER_SIZE*0.4);
-            for (var amount=0; amount < 8; amount++){
-                point(end1[0] + random(-1,1)*LAZER_SIZE, 
-                end1[1] + random(-1,1)*LAZER_SIZE);
+            for (let i = 0; i < PARTICLES_ADDITION; i++){
+                lazerParticles.push([
+                    end1[0], 
+                    end1[1],
+                    random(-1.5,1.5),
+                    random(-1.5,1.5)
+                ]);
             }
         }
     });
+
+    // renders particles
+    while (lazerParticles.length > PARTICLES_LIMIT){
+        lazerParticles.shift();
+    }
+    strokeWeight(LAZER_SIZE*0.5);
+    for (let i=0; i<lazerParticles.length; i++){
+        let particle = lazerParticles[i];
+        particle[0] += particle[2] * U;
+        particle[1] += particle[3] * U;
+        point(particle[0], particle[1]);
+    }
+
 }
 
 function renderSourceNode(){
@@ -606,15 +624,24 @@ function renderRedirectNodes(){
 }
 
 function renderPortals(){
-    noFill();
-    strokeWeight(7*U);
     portalsList.forEach(function (portal, i){
-        stroke(i < 2 ? PORTAL_A_COLOR : PORTAL_B_COLOR);
-        var centerPos = getRenderPos(portal.pos);
+        let centerPos = getRenderPos(portal.pos);
+        
+        noStroke();
+        fill(i < 2 ? PORTAL_A_COLOR : PORTAL_B_COLOR);
         ellipse(centerPos[0], centerPos[1], 
         TILE_SCALE*1.3, TILE_SCALE*1.3);
+            
+        let t1 = map(frameCount % 120, 120, 0, 0, 1);
+        let t2 = map((frameCount+60) % 120, 120, 0, 0, 1);
+        noFill();
+        stroke(BG_COLOR);
+        strokeWeight(U*40*min(t1,0.1));
         ellipse(centerPos[0], centerPos[1], 
-        TILE_SCALE*0.5, TILE_SCALE*0.5);
+        TILE_SCALE*1.5*t1, TILE_SCALE*1.5*t1);
+        strokeWeight(U*40*min(t2,0.1));
+        ellipse(centerPos[0], centerPos[1], 
+        TILE_SCALE*1.5*t2, TILE_SCALE*1.5*t2);
     });
 }
 
@@ -624,15 +651,14 @@ function nextLevel(){
     // last level ?
     if (lvIndex >= 5){
         if (!gameEnded){
-            //realScore = 1000 - floor(playedTime/1000);
-            realScore = movesRemaining;
             Rune.gameOver();
             gameEnded = true;
         }
         return;
     }
-    
-    //startTime = (new Date()).getTime();
+
+    lazerParticles = [];
+    movesRemaining = 500;
     lvIndex++;
     isGenerating = true;
     loadCountdown = MINIMAL_LOADTIME;
@@ -641,8 +667,6 @@ function nextLevel(){
     newPuzzle();
 }
 
-//let startTime; // in ms
-//let playedTime; // in ms
 let movesRemaining;
 
 let loadCountdown;
@@ -708,7 +732,6 @@ function setup(){
 
 	Rune.init({
 		resumeGame: function () {
-            //startTime = (new Date()).getTime();
 			isPaused = false;
             showTitle = false;
 		},
@@ -724,31 +747,16 @@ function setup(){
 	});
 }
 
-
+let movesCountShrink = 0; // real size minus this. 0 is at rest 
 
 function draw(){
 	touchCountdown--;
-    /*
-	if (isPaused) {
-        clear();
-        textSize(100*U);
-        fill(GRID_COLOR);
-        noStroke();
-        if (showTitle){
-            text("LAZER\nLOOP", width/2, height/2);
-        }
-        else {
-            text("PAUSED", width/2, height/2);
-        }
-        return;
-    }
-    */
+
 	if (isGenerating){
 		newPuzzle();
     }
     if (loadCountdown > 0 || isGenerating){
         loadCountdown--;
-        //startTime = (new Date()).getTime();
         clear();
         strokeWeight(U*10);
         stroke(GRID_COLOR);
@@ -771,37 +779,35 @@ function draw(){
     updateLazer();
     
 
-    textSize(40*U);
+    textSize(50*U);
     strokeWeight(U*5);
     fill(GRID_COLOR);
     noStroke();
     text((lvIndex+1)+"/6", U*80, U*630); // level text
 
-    if (hasWon) {
-        isSolved = true;
-    }
-    /*
-    // timer text
-    if (!isSolved){ // not solved yet? add time
-        const newTime = (new Date()).getTime();
-        playedTime += newTime - startTime;
-        startTime = newTime;
-    }
-    let displaySec = floor(playedTime/1000) % 60;
-    let displayMin = floor(playedTime/60000);
-    if (displaySec < 10) displaySec = "0" + displaySec;
-    text(`${displayMin}:${displaySec}`, U*80, U*60);
-    */
-    text(movesRemaining, U*80, U*60);
+    // score
+    text(realScore, U*80, U*50);
+    movesCountShrink = max(0, movesCountShrink - 1);
+    textSize((30-movesCountShrink)*U);
+    text("+"+movesRemaining, U*80, U*90);
 
+    if (hasWon) {
+        if (!isSolved){
+            isSolved = true;
+            realScore += movesRemaining;
+        }
+    }
     // next button
     if (isSolved){
+        strokeWeight(U*3);
 		noFill();
 		stroke(GRID_COLOR);
-		rect(U*520, U*60, U*80, U*60);
+        const t = cos(frameCount*10)*3;
+		rect(U*520, U*60, U*80+t, U*60+t);
         fill(GRID_COLOR);
         noStroke();
-        text(">>>", U*520, U*60);
+        triangle(U*495, U*45, U*495, U*75, U*530, U*60);
+        triangle(U*520, U*45, U*520, U*75, U*550, U*60);
     }
 }
 
@@ -821,6 +827,7 @@ function touchEnded(){
         // decrease moves
         if (!isSolved){
             movesRemaining = max(0, movesRemaining - 1);
+            movesCountShrink = 6; // decrease in size
         }
         if (hoveredNode === sourceNode){
             // sNode
@@ -861,5 +868,5 @@ function touchEnded(){
 
 let mainFont;
 function preload(){
-	mainFont = loadFont('./Minecraft.ttf');
+	mainFont = loadFont('./Square.ttf');
 }
