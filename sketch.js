@@ -11,29 +11,119 @@ function restartGame(){
 
 // {rPos, rotation, value, isChecked}
 let sumsList = [];
+let usedCells = []; // for generation
 
+const OPERATORS = {
+	PLUS: "plus",
+	MINUS: "minus",
+	TIMES: "times"
+};
+
+// also check if already used then chance to reroll, else add to usedCells
+function getRandomCell(cellsList){
+	let newCell;
+	while (true){
+		newCell = random(cellsList);
+		// 80% chance to reroll if already used
+		if (usedCells.includes(newCell)){
+			if (random() < 0.9) { continue; }
+		} 
+		else { usedCells.push(newCell); }
+		break;
+	}
+	return newCell;
+}
+
+function generateSum(sumIndex){
+	if (sumIndex >= sumsList.length){ return; }
+	
+	let pieceLength = randomInt(3,5); // 3 and 4
+	let potentialNextCells = [];
+	let pieceCells = [];
+	
+	// pick a random starting cell
+	let rootCell;
+	while (true){
+		rootCell = getRandomCell(baseCellsList);
+		// don't pick multiplier
+		if (rootCell.numItem.operator === OPERATORS.TIMES){ continue; }
+		break;
+	}
+	potentialNextCells = [rootCell];
+
+	// pick a random cell, add next cell to piece
+	while (pieceLength > pieceCells.length && potentialNextCells.length > 0){
+		let nextCell = getRandomCell(potentialNextCells);
+		pieceCells.push(nextCell); // add to piece
+		// create new potential list without any piece cell
+		potentialNextCells = [];
+		for (let i=0; i < pieceCells.length; i++){
+			let neighbors = pieceCells[i].neighbors;
+			for (let j=0; j < neighbors.length; j++){
+				let nCell = neighbors[j].cell;
+				if (nCell && !pieceCells.includes(nCell)){
+					potentialNextCells.push(nCell);
+				}
+			}
+		}
+	}
+	
+	let finalSumValue = 0;
+	pieceCells.forEach(pCell => {
+		let numItem = pCell.numItem;
+		console.log(numItem.operator + " " + numItem.value);//////
+		if (numItem.operator === OPERATORS.PLUS){
+			finalSumValue += numItem.value;
+		} else if (numItem.operator === OPERATORS.MINUS){
+			finalSumValue -= numItem.value;
+		} else if (numItem.operator === OPERATORS.TIMES){
+			finalSumValue *= numItem.value;
+		}
+	});
+	console.log(finalSumValue + " (length: " + pieceCells.length +")");
+
+	// validate sum (can't be 0, or beyond 30, or repeated)
+	if (finalSumValue === 0 || finalSumValue > 30 || finalSumValue < -30
+		|| sumsList.some(s => s.value === finalSumValue)){
+		console.log("regenerating sum..."); /////
+		generateSum(sumIndex);
+	} else {
+		// set to real sum
+		let sumItem = sumsList[sumIndex];
+		sumItem.isChecked = false;
+		sumItem.value = finalSumValue;
+	}	
+}
 
 // setting up new level
 function generateLevel(){
 	// reset all game states ///////
-	NUM_SPAWN.index = 0;
+	numSpawnIndex = 0;
+	usedCells = [];
 
 	// generate numItems
 	baseCellsList.forEach(cell => {
-		let newNum = 0;
-		while (true){
-			newNum = floor(random(1, 9)) * (random() < 0.5? -1: 1);
-			// if is negative then 50% chance to reroll
-			if (newNum < 0){
-				if (random() < 0.5) { continue; }
-			}
-			break;
-		}
 		cell.numItem = {
-			value: newNum,
+			value: randomInt(1, 10),
+			// 60% to be positive
+			operator: random() < 0.6? OPERATORS.PLUS : OPERATORS.MINUS,
 			size: 0
 		};
 	});
+	// add 3 multipliers
+	for (let i=0; i<3; i++){
+		let numItem;
+		while (true){
+			numItem = random(baseCellsList).numItem;
+			// is already TIMES?
+			if (numItem.operator === OPERATORS.TIMES){
+				continue;
+			}
+			numItem.value = randomInt(2,5);
+			numItem.operator = OPERATORS.TIMES;
+			break;
+		}
+	}
 
 }
 
@@ -50,6 +140,9 @@ function _(n){
 	return n/100*width;
 }
 
+function randomInt(start, end){
+	return floor(random(start, end));
+}
 
 const TRIANGLE_LENGTH = 26; // out of 100%
 const TRIANGLE_HEIGHT = Math.sqrt(3)/2*TRIANGLE_LENGTH;
@@ -58,7 +151,7 @@ const BASE_CELLS = [];
 let baseCellsList = [];
 
 // rendering info only
-// {x,y, isWest (pointing left), centerRPos[rx,ry], points[rx, ry][3], neighbors, numItem}
+// {x,y, isWest (pointing left), centerRPos[rx,ry], points[rx, ry][3], neighbors{cell, border}[], numItem}
 function Cell(x,y){
 	// neighbors contains 3 of {cell: null | Cell, border: [point1, point2]}
 	// if cell is null then it doesn't exist
@@ -112,11 +205,7 @@ function renderCell(cell){
 	);
 }
 
-const NUM_SPAWN = {
-	DURATION: 2,
-	index: 0, // block input if this isn't done (= baseCellsList.length)
-	timer: 0
-};
+let numSpawnIndex = 0; // block input if this isn't done (= baseCellsList.length)
 
 let COLORS = {};
 function setup(){
@@ -220,7 +309,7 @@ function setup(){
 	let temporaryArr = [];
 	while (baseCellsList.length > 0){
 		temporaryArr.push(
-			baseCellsList.splice(floor(random(0, baseCellsList.length)),1).pop()
+			baseCellsList.splice(randomInt(0, baseCellsList.length),1).pop()
 		);
 	}
 	baseCellsList = temporaryArr;
@@ -265,9 +354,17 @@ function draw(){
 		if (cell.numItem.size > 1){
 			cell.numItem.size = max(1, cell.numItem.size - 0.1);
 		}
-		textSize(_(12) * cell.numItem.size);
-		fill(cell.numItem.value < 0 ? COLORS.RED : COLORS.GREEN);
-		text(abs(cell.numItem.value), cell.centerRPos[0], cell.centerRPos[1]);
+		textSize(_(10) * cell.numItem.size);
+		if (cell.numItem.operator === OPERATORS.PLUS){
+			fill(COLORS.WHITE);
+			text("+"+cell.numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+		} else if (cell.numItem.operator === OPERATORS.MINUS){
+			fill(COLORS.RED);
+			text("-"+cell.numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+		} else if (cell.numItem.operator === OPERATORS.TIMES){
+			fill(COLORS.GREEN);
+			text("×"+cell.numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+		}
 	}
 
 	if (isDoneSpawning()){
@@ -291,19 +388,17 @@ function draw(){
 			pop();
 		}
 	} else {
-		// update spawning
+		// update spawning & generating sum
 		//////// don't if viewing tutorial
-		if (NUM_SPAWN.timer-- <= 0){
-			baseCellsList[NUM_SPAWN.index].numItem.size = 1.5;
-			NUM_SPAWN.timer = NUM_SPAWN.DURATION;
-			NUM_SPAWN.index++;
-		}
+		generateSum(numSpawnIndex);
+		baseCellsList[numSpawnIndex].numItem.size = 1.8;
+		numSpawnIndex++;
 	}
 
 }
 
 function isDoneSpawning(){
-	return NUM_SPAWN.index >= baseCellsList.length;
+	return numSpawnIndex >= baseCellsList.length;
 }
 
 let mainFont;
