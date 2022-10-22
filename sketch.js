@@ -10,6 +10,8 @@ function restartGame(){
 
 /* LOGIC */
 
+// {rPos, rotation, value}
+let sumsList = [];
 
 
 /* CONTROL */
@@ -28,16 +30,17 @@ function _(n){
 
 const TRIANGLE_LENGTH = 26; // out of 100%
 const TRIANGLE_HEIGHT = Math.sqrt(3)/2*TRIANGLE_LENGTH;
-const BOARD_CENTER = [50, 80];
+const BOARD_CENTER = [50, 70];
 const BASE_CELLS = [];
 
 // rendering info only
-// {x,y, isWest (pointing left), centerRPos[rx,ry], points[rx, ry][3]}
+// {x,y, isWest (pointing left), centerRPos[rx,ry], points[rx, ry][3], neighbors, numItem}
 function Cell(x,y){
-	this.x = x;
-	this.y = y;
+	// neighbors contains 3 of {cell: null | Cell, border: [point1, point2]}
+	// if cell is null then it doesn't exist
+	this.neighbors = [];
+	this.numItem = null; // null | {value, size}
 	this.isWest = (x+y) % 2 !== 0;
-
 	
 	this.centerRPos = [
 		// center-x-grid + x-order + (isWest? big part of TH : small part of TH)
@@ -84,6 +87,7 @@ function renderCell(cell){
 	);
 }
 
+let COLORS = {};
 function setup(){
 	HEIGHT_RATIO = 1.4;
 	CANVAS_WIDTH = min(
@@ -102,6 +106,21 @@ function setup(){
 	rectMode(CENTER);
 	angleMode(DEGREES);
 	
+	COLORS = {
+		BG: color(10, 10, 10),
+		WHITE: color(250, 250, 250),
+		GREEN: color(20, 230, 20),
+		RED: color(230, 20, 20)
+	}
+
+	// set up sums list
+	sumsList = [
+		{ rPos: [_(12), _(31)], rotation: -30, value: -99 },
+		{ rPos: [_(34), _(19)], rotation: -30, value: -99 },
+		{ rPos: [_(64), _(122)], rotation: -30, value: -99 },
+		{ rPos: [_(85), _(110)], rotation: -30, value: -99 }
+	];
+
 	// set up base cells
 	const excludedPos = [
 		"0,0", "3,0", "0,6", "3,6"
@@ -118,6 +137,47 @@ function setup(){
 		}
 		BASE_CELLS.push(row);
 	}
+	// set up neighbors
+	for (let y=0; y<7; y++){
+		for (let x=0; x<4; x++){
+			let cell = BASE_CELLS[y][x];
+			if (cell){
+				let topNeighbor, bottomNeighbor, sideNeighbor;
+				topNeighbor = y - 1 >= 0? BASE_CELLS[y-1][x] : null;
+				bottomNeighbor = y + 1 < 7? BASE_CELLS[y+1][x] : null;
+				if (cell.isWest){
+					sideNeighbor = x + 1 < 4? BASE_CELLS[y][x + 1] : null;
+				} else {
+					sideNeighbor = x - 1 >= 0? BASE_CELLS[y][x - 1] : null;
+				}
+
+				cell.neighbors.push({
+					cell: topNeighbor,
+					border: [
+						cell.points[0],
+						cell.points[1]
+					]
+				});
+				cell.neighbors.push({
+					cell: bottomNeighbor,
+					border: [
+						cell.points[0],
+						cell.points[2]
+					]
+				});
+				cell.neighbors.push({
+					cell: sideNeighbor,
+					border: [
+						cell.points[1],
+						cell.points[2]
+					]
+				});
+
+			}
+		}
+	}
+
+
 
 	Rune.init({
 		resumeGame: function () {
@@ -147,15 +207,36 @@ function draw(){
 		for (let x=0; x<4; x++){
 			let cell = BASE_CELLS[y][x];
 			if (cell) {
-				stroke(200);
+				stroke(150);
 				noFill();
 				renderCell(cell);
 
 				fill(255);
-				noStroke()
-				text((cell.x + cell.y) % 10, cell.centerRPos[0], cell.centerRPos[1]);
+				noStroke();
+				text("9", cell.centerRPos[0], cell.centerRPos[1]);
+
 			}
 		}
+	}
+
+	// sums
+	textSize(_(8));
+	noStroke();
+	for (let i=0; i<sumsList.length; i++){
+		let sum = sumsList[i];
+		push();
+		translate(sum.rPos[0], sum.rPos[1]);
+		rotate(sum.rotation);
+		// draw box if checked out
+		fill(COLORS.GREEN);
+		if (!false) {
+			rect(0,0, _(14), _(9));
+			fill(COLORS.BG);
+			text(sum.value, 0, 0);
+		} else {
+			text(sum.value, 0, 0);
+		}
+		pop();
 	}
 
 }
