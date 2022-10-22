@@ -8,11 +8,34 @@ function restartGame(){
 
 
 
-/* LOGIC */
 
-// {rPos, rotation, value}
+// {rPos, rotation, value, isChecked}
 let sumsList = [];
 
+
+// setting up new level
+function generateLevel(){
+	// reset all game states ///////
+	NUM_SPAWN.index = 0;
+
+	// generate numItems
+	baseCellsList.forEach(cell => {
+		let newNum = 0;
+		while (true){
+			newNum = floor(random(1, 9)) * (random() < 0.5? -1: 1);
+			// if is negative then 50% chance to reroll
+			if (newNum < 0){
+				if (random() < 0.5) { continue; }
+			}
+			break;
+		}
+		cell.numItem = {
+			value: newNum,
+			size: 0
+		};
+	});
+
+}
 
 /* CONTROL */
 
@@ -32,6 +55,7 @@ const TRIANGLE_LENGTH = 26; // out of 100%
 const TRIANGLE_HEIGHT = Math.sqrt(3)/2*TRIANGLE_LENGTH;
 const BOARD_CENTER = [50, 70];
 const BASE_CELLS = [];
+let baseCellsList = [];
 
 // rendering info only
 // {x,y, isWest (pointing left), centerRPos[rx,ry], points[rx, ry][3], neighbors, numItem}
@@ -39,7 +63,8 @@ function Cell(x,y){
 	// neighbors contains 3 of {cell: null | Cell, border: [point1, point2]}
 	// if cell is null then it doesn't exist
 	this.neighbors = [];
-	this.numItem = null; // null | {value, size}
+	// null | {value, size(1.0 is normal)}
+	this.numItem = null;
 	this.isWest = (x+y) % 2 !== 0;
 	
 	this.centerRPos = [
@@ -87,6 +112,12 @@ function renderCell(cell){
 	);
 }
 
+const NUM_SPAWN = {
+	DURATION: 2,
+	index: 0, // block input if this isn't done (= baseCellsList.length)
+	timer: 0
+};
+
 let COLORS = {};
 function setup(){
 	HEIGHT_RATIO = 1.4;
@@ -105,20 +136,27 @@ function setup(){
 	textAlign(CENTER, CENTER);
 	rectMode(CENTER);
 	angleMode(DEGREES);
+	strokeJoin(ROUND);
 	
 	COLORS = {
-		BG: color(10, 10, 10),
-		WHITE: color(250, 250, 250),
-		GREEN: color(20, 230, 20),
-		RED: color(230, 20, 20)
+		BG: color(23, 15, 48),
+		WHITE: color(200, 175, 255),
+		GRAY: color(80, 70, 148),
+		GREEN: color(15, 220, 100),
+		RED: color(220, 120, 20)
 	}
 
 	// set up sums list
 	sumsList = [
-		{ rPos: [_(12), _(31)], rotation: -30, value: -99 },
-		{ rPos: [_(34), _(19)], rotation: -30, value: -99 },
-		{ rPos: [_(64), _(122)], rotation: -30, value: -99 },
-		{ rPos: [_(85), _(110)], rotation: -30, value: -99 }
+		{ rPos: [_(15), _(30)], rotation: -30, value: 0, isChecked: false },
+		{ rPos: [_(34), _(19)], rotation: -30, value: 0, isChecked: false },
+		{ rPos: [_(15), _(111)], rotation: 30, value: 0, isChecked: false },
+		{ rPos: [_(34), _(122)], rotation: 30, value: 0, isChecked: false },
+
+		{ rPos: [_(66), _(122)], rotation: -30, value: 0, isChecked: false },
+		{ rPos: [_(85), _(111)], rotation: -30, value: 0, isChecked: false },
+		{ rPos: [_(66), _(19)], rotation: 30, value: 0, isChecked: false },
+		{ rPos: [_(85), _(30)], rotation: 30, value: 0, isChecked: false }
 	];
 
 	// set up base cells
@@ -132,7 +170,9 @@ function setup(){
 			if (excludedPos.includes(x+","+y)) {
 				row.push(null);
 			} else {
-				row.push(new Cell(x,y));
+				const cell = new Cell(x,y);
+				row.push(cell);
+				baseCellsList.push(cell); // 1D list
 			}
 		}
 		BASE_CELLS.push(row);
@@ -172,12 +212,20 @@ function setup(){
 						cell.points[2]
 					]
 				});
-
 			}
 		}
 	}
 
+	// shuffle baseCellsList
+	let temporaryArr = [];
+	while (baseCellsList.length > 0){
+		temporaryArr.push(
+			baseCellsList.splice(floor(random(0, baseCellsList.length)),1).pop()
+		);
+	}
+	baseCellsList = temporaryArr;
 
+	generateLevel();
 
 	Rune.init({
 		resumeGame: function () {
@@ -198,47 +246,64 @@ function setup(){
 
 function draw(){
 	touchCountdown--;
-    background(0);
+    background(COLORS.BG);
 
-	// for each base cell
-	strokeWeight(_(0.5));
-	textSize(_(12));
-	for (let y=0; y<7; y++){
-		for (let x=0; x<4; x++){
-			let cell = BASE_CELLS[y][x];
-			if (cell) {
-				stroke(150);
-				noFill();
-				renderCell(cell);
-
-				fill(255);
-				noStroke();
-				text("9", cell.centerRPos[0], cell.centerRPos[1]);
-
-			}
-		}
+	// grid
+	strokeWeight(_(0.8));
+	stroke(COLORS.GRAY);
+	noFill();
+	for (let i=0; i<baseCellsList.length; i++){
+		let cell = baseCellsList[i];
+		renderCell(cell);
 	}
 
-	// sums
-	textSize(_(8));
+	// num items
 	noStroke();
-	for (let i=0; i<sumsList.length; i++){
-		let sum = sumsList[i];
-		push();
-		translate(sum.rPos[0], sum.rPos[1]);
-		rotate(sum.rotation);
-		// draw box if checked out
-		fill(COLORS.GREEN);
-		if (!false) {
-			rect(0,0, _(14), _(9));
-			fill(COLORS.BG);
-			text(sum.value, 0, 0);
-		} else {
-			text(sum.value, 0, 0);
+	for (let i=0; i<baseCellsList.length; i++){
+		let cell = baseCellsList[i];
+		// update size if bigger than normal
+		if (cell.numItem.size > 1){
+			cell.numItem.size = max(1, cell.numItem.size - 0.1);
 		}
-		pop();
+		textSize(_(12) * cell.numItem.size);
+		fill(cell.numItem.value < 0 ? COLORS.RED : COLORS.GREEN);
+		text(abs(cell.numItem.value), cell.centerRPos[0], cell.centerRPos[1]);
 	}
 
+	if (isDoneSpawning()){
+		// sums
+		textSize(_(8));
+		noStroke();
+		for (let i=0; i<sumsList.length; i++){
+			let sum = sumsList[i];
+			push();
+			translate(sum.rPos[0], sum.rPos[1]);
+			rotate(sum.rotation);
+			// draw box if checked out
+			fill(COLORS.WHITE);
+			if (sum.isChecked) {
+				rect(0,0, _(14), _(9));
+				fill(COLORS.BG);
+				text(sum.value, 0, 0);
+			} else {
+				text(sum.value, 0, 0);
+			}
+			pop();
+		}
+	} else {
+		// update spawning
+		//////// don't if viewing tutorial
+		if (NUM_SPAWN.timer-- <= 0){
+			baseCellsList[NUM_SPAWN.index].numItem.size = 1.5;
+			NUM_SPAWN.timer = NUM_SPAWN.DURATION;
+			NUM_SPAWN.index++;
+		}
+	}
+
+}
+
+function isDoneSpawning(){
+	return NUM_SPAWN.index >= baseCellsList.length;
 }
 
 let mainFont;
