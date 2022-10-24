@@ -1,9 +1,20 @@
 const SUM_COLOR_SPEED = 0.2;
+const PARTICLES_AMOUNT = 5;
+
+let soundEffect = {src: "soundeffect.wav", vol: 1.0};
+const allSounds = [soundEffect];
+function playSoundEffect(){
+	if (soundEffect.sound){
+		soundEffect.sound.play();
+	}
+}
+
 
 let realScore = 0; // gained after each level
 let currentLevelScore = 0; // for current level, can be undone
 let displayScore = 0; // ANIMATED realScore + currentLevelScore
-
+let displayScoreSize = 1;
+let isPaused = true; // block input
 
 function restartGame(){
 	// reset score, level index, new puzzle (auto reset randomness)
@@ -106,6 +117,8 @@ function generateLevel(){
 	// reset all game states ///////
 	numSpawnIndex = 0;
 	usedCells = [];
+	deselect();
+	undoHistory = [];
 
 	// generate numItems
 	baseCellsList.forEach(cell => {
@@ -146,6 +159,7 @@ function selectCell(cell){
 	// enlargement on selection if not used
 	if (!cell.numItem.isUsed){
 		cell.numItem.size = 1.5;
+		playSoundEffect();
 	}
 
 	// if have selected 4 cells
@@ -201,7 +215,7 @@ function cellIsHovered(cell){
 }
 
 function touchStarted(){
-	if (!touchIsDown && isDoneSpawning()){
+	if (!touchIsDown && isDoneSpawning() && !isPaused){
 		touchIsDown = true;
 
 		// if no selected cell, check hover on all except multipliers (unless used)
@@ -219,19 +233,27 @@ function touchStarted(){
 }
 
 function sumMatched(cellsList, sumItem){
-	////// add both parameters to undo history items 
+	// add to undo history item: cellsList of unused cells and sumItem
+	undoHistory.push({
+		cellsList: cellsList.filter(c => !c.numItem.isUsed),
+		sumItem: sumItem
+	});
 
 	// collect numbers on given cells if not already used
 	cellsList.forEach(c => {
-		c.numItem.isUsed = true;
-		/////// add to currentLevelScore
-		/////// add animated dots
+		// add to currentLevelScore
+		if (!c.numItem.isUsed){
+			currentLevelScore += 10;
+			// add animated dots
+			particlize(c.centerRPos[0], c.centerRPos[1]);
+			c.numItem.isUsed = true;
+		}
 	});
 }
 
 
 function touchEnded(){
-	if (touchIsDown){
+	if (touchIsDown && !isPaused){
 		touchIsDown = false;
 
 		// apply selected cells
@@ -251,6 +273,41 @@ function touchEnded(){
 	}
 }
 
+let undoHistory = []; // {cellsList, sumItem}
+
+function undo(){
+	if (undoHistory.length > 0){
+		let undoItem = undoHistory.pop();
+		undoItem.sumItem.isChecked = false;
+		undoItem.cellsList.forEach(c => {
+			currentLevelScore -= 10;
+			c.numItem.isUsed = false;
+			c.numItem.size = 1.5;
+		});
+
+		// failsafe when out of undos: restore all numbers & sums, reset current score
+		if (undoHistory.length === 0){
+			currentLevelScore = 0;
+			baseCellsList.forEach(c => {
+				c.numItem.isUsed = false;
+				if (c.numItem.size < 1){
+					c.numItem.size = 1;
+				}
+			});
+			sumsList.forEach(s => {
+				s.isChecked = false;
+			});
+		}
+
+		displayScore = realScore + currentLevelScore;
+		particles = [];
+		deselect();
+	}
+}
+
+function keyPressed(){
+	undo();
+}
 
 
 
@@ -267,7 +324,8 @@ function randomInt(start, end){
 
 const TRIANGLE_LENGTH = 26; // out of 100%
 const TRIANGLE_HEIGHT = Math.sqrt(3)/2*TRIANGLE_LENGTH;
-const BOARD_CENTER = [50, 70];
+const BOARD_CENTER = [50, 75];
+const DISPLAY_SCORE_CENTER = [20, 10];
 const BASE_CELLS = [];
 let baseCellsList = [];
 
@@ -332,6 +390,19 @@ function renderCell(cell){
 
 let numSpawnIndex = 0; // block input if this isn't done (= baseCellsList.length)
 
+let particles = []; // {x,y, vx, vy, timer}
+// spawn particles at given position
+function particlize(x, y){
+	const deg = 360 / PARTICLES_AMOUNT;
+	for (let i=0; i < PARTICLES_AMOUNT; i++){
+		particles.push({
+			x: x, y: y, 
+			vx: _(sin(deg*i)), vy: _(cos(deg*i)), 
+			timer: floor(random(10, 20))
+		});
+	}
+}
+
 let COLORS = {};
 function setup(){
 	HEIGHT_RATIO = 1.4;
@@ -357,20 +428,20 @@ function setup(){
 		WHITE: color(200, 175, 255),
 		GRAY: color(80, 70, 148),
 		GREEN: color(15, 220, 100),
-		RED: color(220, 120, 20)
+		RED: color(220, 140, 30)
 	}
 
 	// set up sums list
 	sumsList = [
-		{rPos: [_(15), _(30)], rotation: -30},
-		{rPos: [_(34), _(19)], rotation: -30},
-		{rPos: [_(15), _(111)], rotation: 30},
-		{rPos: [_(34), _(122)], rotation: 30},
+		{rPos: [_(15), _(35)], rotation: -30},
+		{rPos: [_(34), _(24)], rotation: -30},
+		{rPos: [_(15), _(116)], rotation: 30},
+		{rPos: [_(34), _(127)], rotation: 30},
 
-		{rPos: [_(66), _(122)], rotation: -30},
-		{rPos: [_(85), _(111)], rotation: -30},
-		{rPos: [_(66), _(19)], rotation: 30},
-		{rPos: [_(85), _(30)], rotation: 30}
+		{rPos: [_(66), _(127)], rotation: -30},
+		{rPos: [_(85), _(116)], rotation: -30},
+		{rPos: [_(66), _(24)], rotation: 30},
+		{rPos: [_(85), _(35)], rotation: 30}
 	];
 	sumsList.forEach(sumItem => { // same properties
 		sumItem.value = 0;
@@ -448,10 +519,10 @@ function setup(){
 
 	Rune.init({
 		resumeGame: function () {
-			
+			isPaused = false;
 		},
 		pauseGame: function () {
-			
+			isPaused = true;
 		},
 		restartGame: function () {
 			restartGame();
@@ -516,7 +587,7 @@ function draw(){
 	});
 
 	// potential cells outline
-	strokeWeight(_(1.0));
+	strokeWeight(_(0.8));
 	stroke(COLORS.RED);
 	for (let i=0; i<gameInput.potentialCells.length; i++){
 		let potentialCell = gameInput.potentialCells[i];
@@ -554,6 +625,28 @@ function draw(){
 		}
 	}
 
+	// update displayScore (if no particle animating)
+	if (particles.length === 0){
+		const targetDisplayScore = realScore + currentLevelScore;
+		if (displayScore > targetDisplayScore){
+			displayScore--;
+		} else if (displayScore < targetDisplayScore) {
+			displayScore++;
+		}
+		if (displayScoreSize > 1){
+			displayScoreSize = max(1, displayScoreSize - 0.2);
+		}
+	}
+
+	// display score
+	textSize(_(10*displayScoreSize)); noStroke();
+	fill(displayScoreSize > 1 ? COLORS.GREEN : COLORS.WHITE);
+	for (let i=0; i<5; i++){
+		let t = frameCount*4 + 36*i;
+		square(_(cos(t)*10 + 20), _(sin(t*2)*5 + 10), _(2));
+	}
+	text(displayScore, _(DISPLAY_SCORE_CENTER[0]), _(DISPLAY_SCORE_CENTER[1]));
+	
 
 	// only if done spawning numbers
 	if (isDoneSpawning()){
@@ -574,12 +667,7 @@ function draw(){
 			translate(sumItem.rPos[0], sumItem.rPos[1]);
 			rotate(sumItem.rotation);
 			
-			const boxColor = lerpColor(COLORS.BG, COLORS.WHITE, sumItem.transition);
-			const sumTextColor = lerpColor(COLORS.WHITE, COLORS.BG, sumItem.transition);
-
-			fill(boxColor);
-			rect(0,0, _(14), _(9));
-			fill(sumTextColor);
+			fill(lerpColor(COLORS.WHITE, COLORS.GRAY, sumItem.transition));
 			text(sumItem.value, 0, 0);
 
 			if (sumItem.isChecked) { // checked then go towards 1
@@ -626,8 +714,32 @@ function draw(){
 		numItem.size = 1.8;
 		numItem.isUsed = false;
 		numSpawnIndex++;
-		
 	}
+
+	// particles
+	fill(COLORS.WHITE);
+	for (let i=particles.length-1; i >= 0; i--){
+		let pc = particles[i];
+		// update velocity and position
+		if (pc.timer-- <= 0){
+			const diffX = _(DISPLAY_SCORE_CENTER[0]) - pc.x;
+			const diffY = _(DISPLAY_SCORE_CENTER[1]) - pc.y;
+			pc.vx = diffX*0.1;
+			pc.vy = min(_(-2), diffY*0.1);
+		}
+		pc.x += pc.vx;
+		pc.y += pc.vy;
+		square(pc.x, pc.y, _(2));
+
+		// remove if above display score
+		if (pc.y < _(DISPLAY_SCORE_CENTER[1])){
+			particles.splice(i, 1);
+			displayScoreSize = 1.8; // enlarge score
+			displayScore += 10/PARTICLES_AMOUNT;
+			playSoundEffect();
+		}
+	}
+
 
 }
 
@@ -638,4 +750,12 @@ function isDoneSpawning(){
 let mainFont;
 function preload(){
 	mainFont = loadFont('./Square.ttf');
+
+	if (typeof loadSound !== "undefined"){
+		allSounds.forEach(item => {
+			item.sound = loadSound(item.src, ()=>{
+				item.sound.setVolume(item.vol);
+			});
+		});
+	}
 }

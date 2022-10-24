@@ -38,9 +38,18 @@
       script.src = src;
       document.head.appendChild(script);
     }
+    function loadGameScript(){
+      loadScript("sketch.js", ()=>{});
+    }
 
     loadScript("p5.js", ()=>{
-      loadScript("sketch.js", ()=>{});
+      if (typeof AudioWorklet === "undefined"){
+        loadGameScript();
+      } else {
+        loadScript("p5.sound.min.js", ()=>{
+          loadGameScript();
+        });
+      }
     });
     
   </script>
