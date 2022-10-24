@@ -1,4 +1,8 @@
-let realScore = 0;
+const SUM_COLOR_SPEED = 0.2;
+
+let realScore = 0; // gained after each level
+let currentLevelScore = 0; // for current level, can be undone
+let displayScore = 0; // ANIMATED realScore + currentLevelScore
 
 
 function restartGame(){
@@ -9,7 +13,7 @@ function restartGame(){
 
 
 
-// {rPos, rotation, value, isChecked}
+// {rPos, rotation, value, isChecked, transition (0-1)}
 let sumsList = [];
 let usedCells = []; // for generation
 
@@ -18,6 +22,22 @@ const OPERATORS = {
 	MINUS: "minus",
 	TIMES: "times"
 };
+
+function calculateSum(cellsList){
+	let finalSum = 0;
+	cellsList.forEach(pCell => {
+		if (pCell.numItem.isUsed){ return; }
+		let numItem = pCell.numItem;
+		if (numItem.operator === OPERATORS.PLUS){
+			finalSum += numItem.value;
+		} else if (numItem.operator === OPERATORS.MINUS){
+			finalSum -= numItem.value;
+		} else if (numItem.operator === OPERATORS.TIMES){
+			finalSum *= numItem.value;
+		}
+	});
+	return finalSum;
+}
 
 // also check if already used then chance to reroll, else add to usedCells
 function getRandomCell(cellsList){
@@ -68,30 +88,16 @@ function generateSum(sumIndex){
 		}
 	}
 	
-	let finalSumValue = 0;
-	pieceCells.forEach(pCell => {
-		let numItem = pCell.numItem;
-		console.log(numItem.operator + " " + numItem.value);//////
-		if (numItem.operator === OPERATORS.PLUS){
-			finalSumValue += numItem.value;
-		} else if (numItem.operator === OPERATORS.MINUS){
-			finalSumValue -= numItem.value;
-		} else if (numItem.operator === OPERATORS.TIMES){
-			finalSumValue *= numItem.value;
-		}
-	});
-	console.log(finalSumValue + " (length: " + pieceCells.length +")");
-
+	let finalSum = calculateSum(pieceCells);
 	// validate sum (can't be 0, or beyond 30, or repeated)
-	if (finalSumValue === 0 || finalSumValue > 30 || finalSumValue < -30
-		|| sumsList.some(s => s.value === finalSumValue)){
-		console.log("regenerating sum..."); /////
-		generateSum(sumIndex);
+	if (finalSum === 0 || finalSum > 30 || finalSum < -30
+		|| sumsList.some(s => s.value === finalSum)){
+		generateSum(sumIndex); // redo
 	} else {
 		// set to real sum
 		let sumItem = sumsList[sumIndex];
 		sumItem.isChecked = false;
-		sumItem.value = finalSumValue;
+		sumItem.value = finalSum;
 	}	
 }
 
@@ -129,7 +135,122 @@ function generateLevel(){
 
 /* CONTROL */
 
-let touchCountdown = 0;
+let touchIsDown = false;
+let gameInput = {
+	selectedCells: [],
+	potentialCells: []
+};
+
+function selectCell(cell){
+	gameInput.selectedCells.push(cell); // becomes piece cell
+	// enlargement on selection if not used
+	if (!cell.numItem.isUsed){
+		cell.numItem.size = 1.5;
+	}
+
+	// if have selected 4 cells
+	if (gameInput.selectedCells.length >= 4){
+		gameInput.potentialCells = []; // no more selectable cell
+	} else {
+		// remove from potential cells
+		const indexOfCell = gameInput.potentialCells.indexOf(cell);
+		if (indexOfCell !== -1){
+			gameInput.potentialCells.splice(indexOfCell, 1);
+		}
+
+		// add potential cells (if exists && not already selected)
+		cell.neighbors.forEach(neighborItem => {
+			let nCell = neighborItem.cell;
+			// no need to check !gameInput.potentialCells.includes(nCell) because 3 cells don't share any unselected neighbor
+			if (nCell && !gameInput.selectedCells.includes(nCell)){
+				gameInput.potentialCells.push(nCell);
+			}
+		});
+	}
+}
+
+function deselect(){
+	gameInput = {
+		selectedCells: [],
+		potentialCells: []
+	};
+}
+
+function sign(p1, p2, p3){
+	return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1]);
+}
+
+function pointInTriangle(pt, v1, v2, v3){
+	var d1, d2, d3;
+	var has_neg, has_pos;
+
+	d1 = sign(pt, v1, v2);
+	d2 = sign(pt, v2, v3);
+	d3 = sign(pt, v3, v1);
+
+	has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+	has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+	return !(has_neg && has_pos);
+}
+
+function cellIsHovered(cell){
+	// check circular range then triangle points
+	return dist(mouseX, mouseY, cell.centerRPos[0], cell.centerRPos[1]) < _(12) && 
+	pointInTriangle([mouseX, mouseY], cell.points[0], cell.points[1], cell.points[2]);
+}
+
+function touchStarted(){
+	if (!touchIsDown && isDoneSpawning()){
+		touchIsDown = true;
+
+		// if no selected cell, check hover on all except multipliers (unless used)
+		if (gameInput.selectedCells.length === 0){
+			for (let i=0; i<baseCellsList.length; i++){
+				let cell = baseCellsList[i];
+				if (cell.numItem.isUsed || cell.numItem.operator !== OPERATORS.TIMES){
+					if (cellIsHovered(cell)){ selectCell(cell); }
+				}
+			}
+		}
+
+		// check button click //////
+	}
+}
+
+function sumMatched(cellsList, sumItem){
+	////// add both parameters to undo history items 
+
+	// collect numbers on given cells if not already used
+	cellsList.forEach(c => {
+		c.numItem.isUsed = true;
+		/////// add to currentLevelScore
+		/////// add animated dots
+	});
+}
+
+
+function touchEnded(){
+	if (touchIsDown){
+		touchIsDown = false;
+
+		// apply selected cells
+		if (gameInput.selectedCells.length > 0){
+			let inputSum = calculateSum(gameInput.selectedCells);
+			// check if match any unchecked sum
+			sumsList.some(sumItem => {
+				// not matched or already checked? skip
+				if (sumItem.isChecked || sumItem.value !== inputSum){return false;}
+				sumItem.isChecked = true;
+				sumMatched(gameInput.selectedCells, sumItem);
+				return true;
+			});
+			deselect();
+		}
+
+	}
+}
+
 
 
 
@@ -151,12 +272,16 @@ const BASE_CELLS = [];
 let baseCellsList = [];
 
 // rendering info only
-// {x,y, isWest (pointing left), centerRPos[rx,ry], points[rx, ry][3], neighbors{cell, border}[], numItem}
+/* Cell {
+	x,y, isWest (pointing left), 
+	centerRPos[rx,ry], points[rx, ry][3], 
+	neighbors {cell, border}[], 
+	numItem    null | { size, value, operator, isUsed }
+}*/
 function Cell(x,y){
 	// neighbors contains 3 of {cell: null | Cell, border: [point1, point2]}
 	// if cell is null then it doesn't exist
 	this.neighbors = [];
-	// null | {value, size(1.0 is normal)}
 	this.numItem = null;
 	this.isWest = (x+y) % 2 !== 0;
 	
@@ -237,16 +362,21 @@ function setup(){
 
 	// set up sums list
 	sumsList = [
-		{ rPos: [_(15), _(30)], rotation: -30, value: 0, isChecked: false },
-		{ rPos: [_(34), _(19)], rotation: -30, value: 0, isChecked: false },
-		{ rPos: [_(15), _(111)], rotation: 30, value: 0, isChecked: false },
-		{ rPos: [_(34), _(122)], rotation: 30, value: 0, isChecked: false },
+		{rPos: [_(15), _(30)], rotation: -30},
+		{rPos: [_(34), _(19)], rotation: -30},
+		{rPos: [_(15), _(111)], rotation: 30},
+		{rPos: [_(34), _(122)], rotation: 30},
 
-		{ rPos: [_(66), _(122)], rotation: -30, value: 0, isChecked: false },
-		{ rPos: [_(85), _(111)], rotation: -30, value: 0, isChecked: false },
-		{ rPos: [_(66), _(19)], rotation: 30, value: 0, isChecked: false },
-		{ rPos: [_(85), _(30)], rotation: 30, value: 0, isChecked: false }
+		{rPos: [_(66), _(122)], rotation: -30},
+		{rPos: [_(85), _(111)], rotation: -30},
+		{rPos: [_(66), _(19)], rotation: 30},
+		{rPos: [_(85), _(30)], rotation: 30}
 	];
+	sumsList.forEach(sumItem => { // same properties
+		sumItem.value = 0;
+		sumItem.isChecked = false;
+		sumItem.transition = 1;
+	});
 
 	// set up base cells
 	const excludedPos = [
@@ -334,11 +464,10 @@ function setup(){
 
 
 function draw(){
-	touchCountdown--;
     background(COLORS.BG);
 
 	// grid
-	strokeWeight(_(0.8));
+	strokeWeight(_(0.7));
 	stroke(COLORS.GRAY);
 	noFill();
 	for (let i=0; i<baseCellsList.length; i++){
@@ -350,49 +479,154 @@ function draw(){
 	noStroke();
 	for (let i=0; i<baseCellsList.length; i++){
 		let cell = baseCellsList[i];
-		// update size if bigger than normal
-		if (cell.numItem.size > 1){
-			cell.numItem.size = max(1, cell.numItem.size - 0.1);
+		let numItem = cell.numItem;
+
+		// update size
+		if (numItem.isUsed){
+			if (numItem.size > 0){ // shrink to nothingness
+				numItem.size = max(0, numItem.size - 0.1);
+			}
+		} else {
+			if (numItem.size > 1){ // shrink to normal
+				numItem.size = max(1, numItem.size - 0.1);
+			}
 		}
-		textSize(_(10) * cell.numItem.size);
-		if (cell.numItem.operator === OPERATORS.PLUS){
-			fill(COLORS.WHITE);
-			text("+"+cell.numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
-		} else if (cell.numItem.operator === OPERATORS.MINUS){
-			fill(COLORS.RED);
-			text("-"+cell.numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
-		} else if (cell.numItem.operator === OPERATORS.TIMES){
-			fill(COLORS.GREEN);
-			text("×"+cell.numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+
+		// render number
+		if (numItem.size > 0){
+			textSize(_(10) * numItem.size);
+			if (numItem.operator === OPERATORS.PLUS){
+				fill(COLORS.WHITE);
+				text("+"+ numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+			} else if (numItem.operator === OPERATORS.MINUS){
+				fill(COLORS.RED);
+				text("-"+ numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+			} else if (numItem.operator === OPERATORS.TIMES){
+				fill(COLORS.GREEN);
+				text("×"+ numItem.value, cell.centerRPos[0], cell.centerRPos[1]);
+			}
 		}
 	}
 
+	let currentSum = calculateSum(gameInput.selectedCells);
+	let sumIsMatched = sumsList.some(sumItem => {
+		// not matched or already checked? skip
+		if (sumItem.isChecked || sumItem.value !== currentSum){return false;}
+		return true;
+	});
+
+	// potential cells outline
+	strokeWeight(_(1.0));
+	stroke(COLORS.RED);
+	for (let i=0; i<gameInput.potentialCells.length; i++){
+		let potentialCell = gameInput.potentialCells[i];
+		for (let j=0; j<potentialCell.neighbors.length; j++){
+			let neighborItem = potentialCell.neighbors[j];
+			// border with anything except selected and potential cells
+			if (!gameInput.selectedCells.includes(neighborItem.cell) && 
+			!gameInput.potentialCells.includes(neighborItem.cell)){
+				line(
+					neighborItem.border[0][0],
+					neighborItem.border[0][1],
+					neighborItem.border[1][0],
+					neighborItem.border[1][1]
+				);
+			}
+		}
+	}
+
+	// selected cells outline
+	stroke(sumIsMatched? COLORS.GREEN : COLORS.WHITE);
+	strokeWeight(_(1.4));
+	for (let i=0; i<gameInput.selectedCells.length; i++){
+		let selectedCell = gameInput.selectedCells[i];
+		for (let j=0; j<selectedCell.neighbors.length; j++){
+			let neighborItem = selectedCell.neighbors[j];
+			// border with anything not selected
+			if (!gameInput.selectedCells.includes(neighborItem.cell)){
+				line(
+					neighborItem.border[0][0],
+					neighborItem.border[0][1],
+					neighborItem.border[1][0],
+					neighborItem.border[1][1]
+				);
+			}
+		}
+	}
+
+
+	// only if done spawning numbers
 	if (isDoneSpawning()){
+		// if selected any cell then check hover potential cells to directly select
+		if (gameInput.selectedCells.length !== 0 && touchIsDown) {
+			for (let i=0; i<gameInput.potentialCells.length; i++){
+				let cell = gameInput.potentialCells[i];
+				if (cellIsHovered(cell)){ selectCell(cell); }
+			}
+		}
+
 		// sums
 		textSize(_(8));
 		noStroke();
 		for (let i=0; i<sumsList.length; i++){
-			let sum = sumsList[i];
+			let sumItem = sumsList[i];
 			push();
-			translate(sum.rPos[0], sum.rPos[1]);
-			rotate(sum.rotation);
-			// draw box if checked out
-			fill(COLORS.WHITE);
-			if (sum.isChecked) {
-				rect(0,0, _(14), _(9));
-				fill(COLORS.BG);
-				text(sum.value, 0, 0);
+			translate(sumItem.rPos[0], sumItem.rPos[1]);
+			rotate(sumItem.rotation);
+			
+			const boxColor = lerpColor(COLORS.BG, COLORS.WHITE, sumItem.transition);
+			const sumTextColor = lerpColor(COLORS.WHITE, COLORS.BG, sumItem.transition);
+
+			fill(boxColor);
+			rect(0,0, _(14), _(9));
+			fill(sumTextColor);
+			text(sumItem.value, 0, 0);
+
+			if (sumItem.isChecked) { // checked then go towards 1
+				if (sumItem.transition < 1){
+					sumItem.transition = min(1, sumItem.transition + SUM_COLOR_SPEED);
+				}
 			} else {
-				text(sum.value, 0, 0);
+				if (sumItem.transition > 0){
+					sumItem.transition = max(0, sumItem.transition - SUM_COLOR_SPEED);
+				}
 			}
 			pop();
 		}
+
+		// current sum display
+		if (gameInput.selectedCells.length > 0){
+			let renderY = mouseY - _(20);
+			strokeWeight(_(0.5)); 
+			stroke(sumIsMatched? COLORS.GREEN : COLORS.WHITE); 
+			fill(COLORS.BG);
+			beginShape();
+			vertex(mouseX - _(7), renderY - _(5));
+			vertex(mouseX + _(7), renderY - _(5));
+			vertex(mouseX + _(7), renderY + _(5));
+			vertex(mouseX, renderY + _(8));
+			vertex(mouseX - _(7), renderY + _(5));
+			endShape(CLOSE);
+
+			fill(sumIsMatched? COLORS.GREEN : COLORS.WHITE); 
+			noStroke(); textSize(_(8));
+			text(currentSum, mouseX, renderY);
+		}
 	} else {
-		// update spawning & generating sum
 		//////// don't if viewing tutorial
+
+		// update sum generation
 		generateSum(numSpawnIndex);
-		baseCellsList[numSpawnIndex].numItem.size = 1.8;
+		if (isDoneSpawning()){
+			sumsList.forEach(s => console.log(s.isChecked));
+		}
+		
+		// update spawning
+		let numItem = baseCellsList[numSpawnIndex].numItem;
+		numItem.size = 1.8;
+		numItem.isUsed = false;
 		numSpawnIndex++;
+		
 	}
 
 }
