@@ -2,19 +2,19 @@
 const SUM_COLOR_SPEED = 0.2;
 const PARTICLES_AMOUNT = 5;
 
-let soundEffect = {src: "soundeffect.mp3", vol: 1.0};
-function playSoundEffect(){
-	if (soundEffect.sound ){
-		soundEffect.sound.stop();
-		soundEffect.sound.play();
-	}
-}
-
 let realScore = 0; // gained after each level
 let currentLevelScore = 0; // for current level, can be undone
 let displayScore = 0; // ANIMATED realScore + currentLevelScore
 let displayScoreSize = 1;
 let isPaused = true; // block input
+let levelIndex = 0;
+let levelScores = [0,0,0];
+const SCENES = {
+	TUTORIAL: 0,
+	PLAY: 1,
+	CONFIRM: 2
+};
+let scene = SCENES.TUTORIAL;
 
 function restartGame(){
 	// reset score, level index, new puzzle (auto reset randomness)
@@ -116,7 +116,8 @@ function generateSum(sumIndex){
 
 // setting up new level
 function generateLevel(){
-	// reset all game states ///////
+	// reset all game states
+	currentLevelScore = 0;
 	numSpawnIndex = 0;
 	usedCells = [];
 	undoHistory = [];
@@ -163,7 +164,6 @@ function selectCell(cell){
 	// enlargement on selection if not used
 	if (!cell.numItem.isUsed){
 		cell.numItem.size = 1.5;
-		playSoundEffect();
 	}
 
 	// if have selected 4 cells
@@ -218,9 +218,13 @@ function cellIsHovered(cell){
 }
 
 function touchStarted(){
-	if (!touchIsDown && isDoneSpawning() && !isPaused){
-		touchIsDown = true;
+	// already touching or is paused then quit
+	if (!touchIsDown && !isPaused){
+	touchIsDown = true;	
+	} else { return; }
 
+	// PLAY SCENE input
+	if (scene === SCENES.PLAY && isDoneSpawning()){
 		// check buttons click
 		undoButton.checkClicked();
 		doneButton.checkClicked();
@@ -234,6 +238,35 @@ function touchStarted(){
 				}
 			}
 		}
+		return;
+	}
+
+	// CONFIRM SCENE
+	if (scene === SCENES.CONFIRM){
+		// within y range?
+		if (mouseY < _(115 + 10) && mouseY > _(115 - 10)){
+			// cancel button
+			if (mouseX < _(25 + 10) && mouseX > _(25 - 10)){
+				scene = SCENES.PLAY;
+			}
+			// confirm button
+			else if (mouseX < _(75 + 10) && mouseX > _(75 - 10)){
+				// set new score
+				levelScores[levelIndex] = currentLevelScore;
+				realScore += currentLevelScore;
+				levelIndex++;
+				if (levelIndex < levelScores.length){
+					generateLevel();
+					scene = SCENES.PLAY;
+				}
+			}
+		}
+		return;
+	}
+
+	// TUTORIAL SCENE
+	if (scene === SCENES.TUTORIAL){
+		scene = SCENES.PLAY;
 	}
 }
 
@@ -444,41 +477,41 @@ function setup(){
 	}
 
 	undoButton = new Button(_(85), _(128),
-	function(){
-		line(
-			this.x + _(3), this.y + _(3), 
-			this.x + _(3), this.y - _(3)
-		);
-		line(
-			this.x - _(3), this.y - _(3), 
-			this.x + _(3), this.y - _(3)
-		);
-		line(
-			this.x - _(3), this.y + _(3), 
-			this.x - _(3), this.y - _(3)
-		);
-		line(
-			this.x - _(3), this.y + _(3), 
-			this.x - _(5), this.y
-		);
-		line(
-			this.x - _(3), this.y + _(3), 
-			this.x - _(1), this.y
-		);
+		function(){
+			line(
+				this.x + _(3), this.y + _(3), 
+				this.x + _(3), this.y - _(3)
+			);
+			line(
+				this.x - _(3), this.y - _(3), 
+				this.x + _(3), this.y - _(3)
+			);
+			line(
+				this.x - _(3), this.y + _(3), 
+				this.x - _(3), this.y - _(3)
+			);
+			line(
+				this.x - _(3), this.y + _(3), 
+				this.x - _(5), this.y
+			);
+			line(
+				this.x - _(3), this.y + _(3), 
+				this.x - _(1), this.y
+			);
 	}, undo);
 
 	doneButton = new Button(_(85), _(12),
-	function(){
-		line(
-			this.x - _(3), this.y, 
-			this.x - _(1.5), this.y + _(3)
-		);
-		line(
-			this.x + _(3), this.y - _(3), 
-			this.x - _(1.5), this.y + _(3)
-		);
-	}, function(){
-		////// open confirm modal
+		function(){
+			line(
+				this.x - _(3), this.y, 
+				this.x - _(1.5), this.y + _(3)
+			);
+			line(
+				this.x + _(3), this.y - _(3), 
+				this.x - _(1.5), this.y + _(3)
+			);
+		}, function(){
+			scene = SCENES.CONFIRM;
 	});
 
 	// set up sums list
@@ -588,11 +621,7 @@ function setup(){
 
 }
 
-
-function draw(){
-	clickCooldown--;
-    background(COLORS.BG);
-
+function playSceneDraw(){
 	// grid
 	strokeWeight(_(0.7));
 	stroke(COLORS.GRAY);
@@ -700,13 +729,12 @@ function draw(){
 	// display score
 	textSize(_(10*displayScoreSize)); noStroke();
 	fill(displayScoreSize > 1 ? COLORS.GREEN : COLORS.WHITE);
-	/*
-	for (let i=0; i<5; i++){
-		let t = frameCount*4 + 36*i;
-		square(_(cos(t)*10 + 20), _(sin(t*2)*5 + 10), _(2));
-	}
-	*/
 	text(displayScore, _(DISPLAY_SCORE_CENTER[0]), _(DISPLAY_SCORE_CENTER[1]));
+
+	// level text
+	textSize(_(6));
+	fill(COLORS.GRAY);
+	text("LVL " + (levelIndex+1), _(15), _(130));
 
 	// only if done spawning numbers
 	if (isDoneSpawning()){
@@ -791,14 +819,88 @@ function draw(){
 			particles.splice(i, 1);
 			displayScoreSize = 1.8; // enlarge score
 			displayScore += 10/PARTICLES_AMOUNT;
-			playSoundEffect();
 		}
 	}
 
 	// buttons
 	undoButton.draw();
 	doneButton.draw();
+}
 
+
+function draw(){
+	clickCooldown--;
+    background(COLORS.BG);
+
+	// PLAY SCENE
+	if (scene === SCENES.PLAY){
+		playSceneDraw();
+		return;
+	}	
+
+	// CONFIRM SCENE
+	if (scene === SCENES.CONFIRM){
+		let totalScore = 0;
+		// render level texts and scores
+		textAlign(LEFT, CENTER);
+		noStroke();
+		textSize(_(12));
+		for (let i=0; i<levelScores.length; i++){
+			fill(COLORS.WHITE);
+			text("LVL " + (i + 1), _(15), _(25 + i*15));
+			// blinking score if is current level
+			let score = 0;
+			if (levelIndex === i){
+				fill(lerpColor(COLORS.BG, COLORS.GREEN, abs(cos(frameCount*5))));
+				score = currentLevelScore;
+			} else {
+				fill(COLORS.GREEN);
+				score = levelScores[i];
+			}
+			text(score, _(65), _(25 + i*15));
+			totalScore += score;
+		}
+		textAlign(CENTER, CENTER);
+
+		// total score
+		textSize(_(20));
+		fill(COLORS.WHITE);
+		for (let i=0; i<7; i++){
+			let t = frameCount*4 + 40*i;
+			square(_(cos(t)*20 + 50), _(sin(t*2)*10 + 80), _(4));
+		}
+		text(totalScore, _(50), _(80));
+
+		// don't render button if no more level
+		if (levelIndex >= levelScores.length){ return; }
+		
+		strokeWeight(_(3));
+		fill(COLORS.WHITE);
+
+		// confirm button
+		noStroke();
+		square(_(75),_(115), _(20), _(2));
+		stroke(COLORS.BG);
+		line(_(72),_(120),_(80),_(110));
+		line(_(72),_(120),_(70),_(115));
+
+		// cancel button
+		noStroke();
+		square(_(25),_(115), _(20), _(2));
+		stroke(COLORS.BG);
+		line(_(20),_(110), _(30),_(120));
+		line(_(20),_(120), _(30),_(110));
+		
+		return;
+	}
+
+	// TUTORIAL SCENE
+	if (scene === SCENES.TUTORIAL){
+		///////// tutorial rendering
+
+
+		return;
+	}
 }
 
 let clickCooldown = 0;
@@ -833,7 +935,6 @@ Button.prototype.checkClicked = function(){
 	mouseY > this.y - this.size && mouseY < this.y + this.size;
 	if (isHovered && !this.isDisabled && clickCooldown < 0){
 		this.action();
-		playSoundEffect();
 		clickCooldown = 5;
 		return;
 	}
@@ -846,10 +947,4 @@ function isDoneSpawning(){
 let mainFont;
 function preload(){
 	mainFont = loadFont('./Square.ttf');
-
-	if (typeof loadSound !== "undefined"){
-		soundEffect.sound = loadSound(soundEffect.src, ()=>{
-			soundEffect.sound.setVolume(soundEffect.vol);
-		});
-	}
 }
