@@ -1,14 +1,14 @@
 const SUM_COLOR_SPEED = 0.2;
 const PARTICLES_AMOUNT = 5;
 
-let soundEffect = {src: "soundeffect.wav", vol: 1.0};
+let soundEffect = {src: "soundeffect.mp3", vol: 1.0};
 const allSounds = [soundEffect];
 function playSoundEffect(){
-	if (soundEffect.sound){
+	if (soundEffect.sound ){
+		soundEffect.sound.stop();
 		soundEffect.sound.play();
 	}
 }
-
 
 let realScore = 0; // gained after each level
 let currentLevelScore = 0; // for current level, can be undone
@@ -218,6 +218,10 @@ function touchStarted(){
 	if (!touchIsDown && isDoneSpawning() && !isPaused){
 		touchIsDown = true;
 
+		// check buttons click
+		undoButton.checkClicked();
+		doneButton.checkClicked();
+
 		// if no selected cell, check hover on all except multipliers (unless used)
 		if (gameInput.selectedCells.length === 0){
 			for (let i=0; i<baseCellsList.length; i++){
@@ -227,8 +231,6 @@ function touchStarted(){
 				}
 			}
 		}
-
-		// check button click //////
 	}
 }
 
@@ -238,6 +240,8 @@ function sumMatched(cellsList, sumItem){
 		cellsList: cellsList.filter(c => !c.numItem.isUsed),
 		sumItem: sumItem
 	});
+	undoButton.isDisabled = false;
+	doneButton.isDisabled = false;
 
 	// collect numbers on given cells if not already used
 	cellsList.forEach(c => {
@@ -273,6 +277,8 @@ function touchEnded(){
 	}
 }
 
+
+
 let undoHistory = []; // {cellsList, sumItem}
 
 function undo(){
@@ -297,16 +303,14 @@ function undo(){
 			sumsList.forEach(s => {
 				s.isChecked = false;
 			});
+			undoButton.isDisabled = true;
+			doneButton.isDisabled = true;
 		}
 
 		displayScore = realScore + currentLevelScore;
 		particles = [];
 		deselect();
 	}
-}
-
-function keyPressed(){
-	undo();
 }
 
 
@@ -324,9 +328,8 @@ function randomInt(start, end){
 
 const TRIANGLE_LENGTH = 26; // out of 100%
 const TRIANGLE_HEIGHT = Math.sqrt(3)/2*TRIANGLE_LENGTH;
-const BOARD_CENTER = [50, 75];
+const BOARD_CENTER = [50, 72];
 const DISPLAY_SCORE_CENTER = [20, 10];
-const BASE_CELLS = [];
 let baseCellsList = [];
 
 // rendering info only
@@ -403,6 +406,8 @@ function particlize(x, y){
 	}
 }
 
+let undoButton, doneButton;
+
 let COLORS = {};
 function setup(){
 	HEIGHT_RATIO = 1.4;
@@ -431,17 +436,55 @@ function setup(){
 		RED: color(220, 140, 30)
 	}
 
+	undoButton = new Button(_(85), _(128),
+	function(){
+		line(
+			this.x + _(3), this.y + _(3), 
+			this.x + _(3), this.y - _(3)
+		);
+		line(
+			this.x - _(3), this.y - _(3), 
+			this.x + _(3), this.y - _(3)
+		);
+		line(
+			this.x - _(3), this.y + _(3), 
+			this.x - _(3), this.y - _(3)
+		);
+		line(
+			this.x - _(3), this.y + _(3), 
+			this.x - _(5), this.y
+		);
+		line(
+			this.x - _(3), this.y + _(3), 
+			this.x - _(1), this.y
+		);
+	}, undo);
+
+	doneButton = new Button(_(85), _(12),
+	function(){
+		line(
+			this.x - _(3), this.y, 
+			this.x - _(1.5), this.y + _(3)
+		);
+		line(
+			this.x + _(3), this.y - _(3), 
+			this.x - _(1.5), this.y + _(3)
+		);
+	}, function(){
+		////// open confirm modal
+	});
+
 	// set up sums list
 	sumsList = [
-		{rPos: [_(15), _(35)], rotation: -30},
-		{rPos: [_(34), _(24)], rotation: -30},
-		{rPos: [_(15), _(116)], rotation: 30},
-		{rPos: [_(34), _(127)], rotation: 30},
+		{rPos: [_(15), _(33)], rotation: -30},
+		{rPos: [_(34), _(22)], rotation: -30},
+		{rPos: [_(15), _(111)], rotation: 30},
+		{rPos: [_(34), _(122)], rotation: 30},
 
-		{rPos: [_(66), _(127)], rotation: -30},
-		{rPos: [_(85), _(116)], rotation: -30},
-		{rPos: [_(66), _(24)], rotation: 30},
-		{rPos: [_(85), _(35)], rotation: 30}
+		{rPos: [_(66), _(122)], rotation: -30},
+		{rPos: [_(85), _(111)], rotation: -30},
+		{rPos: [_(66), _(22)], rotation: 30},
+		{rPos: [_(85), _(33)], rotation: 30}
 	];
 	sumsList.forEach(sumItem => { // same properties
 		sumItem.value = 0;
@@ -453,6 +496,7 @@ function setup(){
 	const excludedPos = [
 		"0,0", "3,0", "0,6", "3,6"
 	];
+	const BASE_CELLS = [];
 	for (let y=0; y<7; y++){
 		const row = [];
 		for (let x=0; x<4; x++){
@@ -517,6 +561,8 @@ function setup(){
 
 	generateLevel();
 
+	//isPaused = false; ////
+	
 	Rune.init({
 		resumeGame: function () {
 			isPaused = false;
@@ -531,10 +577,13 @@ function setup(){
 			return max(0, realScore);
 		}
 	});
+
+
 }
 
 
 function draw(){
+	clickCooldown--;
     background(COLORS.BG);
 
 	// grid
@@ -641,12 +690,13 @@ function draw(){
 	// display score
 	textSize(_(10*displayScoreSize)); noStroke();
 	fill(displayScoreSize > 1 ? COLORS.GREEN : COLORS.WHITE);
+	/*
 	for (let i=0; i<5; i++){
 		let t = frameCount*4 + 36*i;
 		square(_(cos(t)*10 + 20), _(sin(t*2)*5 + 10), _(2));
 	}
+	*/
 	text(displayScore, _(DISPLAY_SCORE_CENTER[0]), _(DISPLAY_SCORE_CENTER[1]));
-	
 
 	// only if done spawning numbers
 	if (isDoneSpawning()){
@@ -701,8 +751,6 @@ function draw(){
 			text(currentSum, mouseX, renderY);
 		}
 	} else {
-		//////// don't if viewing tutorial
-
 		// update sum generation
 		generateSum(numSpawnIndex);
 		if (isDoneSpawning()){
@@ -740,7 +788,48 @@ function draw(){
 		}
 	}
 
+	// buttons
+	undoButton.draw();
+	doneButton.draw();
 
+}
+
+let clickCooldown = 0;
+function Button(x,y, render, action){
+	this.x = x;
+	this.y = y;
+	this.size = _(7);
+	this.isDisabled = true;
+	this.transition = 0; // 0 is disabled
+	this.render = render;
+	this.action = action;
+}
+Button.prototype.draw = function(){
+	if (this.isDisabled){
+		if (this.transition > 0){ 
+			this.transition = max(0, this.transition - 0.2);
+		}
+	} else {
+		if (this.transition < 1){ 
+			this.transition = min(1, this.transition + 0.2);
+		}
+	}
+	
+	noStroke();
+	fill(lerpColor(COLORS.GRAY, COLORS.WHITE, this.transition));
+	rect(this.x, this.y, this.size*2, this.size*2 - _(2), _(1.5));
+	stroke(COLORS.BG); strokeWeight(_(1.5));
+	this.render();
+}
+Button.prototype.checkClicked = function(){
+	const isHovered = mouseX > this.x - this.size && mouseX < this.x + this.size &&
+	mouseY > this.y - this.size && mouseY < this.y + this.size;
+	if (isHovered && !this.isDisabled && clickCooldown < 0){
+		this.action();
+		playSoundEffect();
+		clickCooldown = 5;
+		return;
+	}
 }
 
 function isDoneSpawning(){
