@@ -1,8 +1,8 @@
+"use strict";
 const SUM_COLOR_SPEED = 0.2;
 const PARTICLES_AMOUNT = 5;
 
 let soundEffect = {src: "soundeffect.mp3", vol: 1.0};
-const allSounds = [soundEffect];
 function playSoundEffect(){
 	if (soundEffect.sound ){
 		soundEffect.sound.stop();
@@ -36,7 +36,8 @@ const OPERATORS = {
 
 function calculateSum(cellsList){
 	let finalSum = 0;
-	cellsList.forEach(pCell => {
+	for (let i=0; i<cellsList.length; i++){
+		let pCell = cellsList[i];
 		if (pCell.numItem.isUsed){ return; }
 		let numItem = pCell.numItem;
 		if (numItem.operator === OPERATORS.PLUS){
@@ -46,7 +47,8 @@ function calculateSum(cellsList){
 		} else if (numItem.operator === OPERATORS.TIMES){
 			finalSum *= numItem.value;
 		}
-	});
+	}
+	
 	return finalSum;
 }
 
@@ -117,18 +119,20 @@ function generateLevel(){
 	// reset all game states ///////
 	numSpawnIndex = 0;
 	usedCells = [];
-	deselect();
 	undoHistory = [];
+	deselect();
 
 	// generate numItems
-	baseCellsList.forEach(cell => {
+	for (let i=0; i<baseCellsList.length ;i++){
+		let cell = baseCellsList[i];
 		cell.numItem = {
 			value: randomInt(1, 10),
 			// 60% to be positive
 			operator: random() < 0.6? OPERATORS.PLUS : OPERATORS.MINUS,
 			size: 0
 		};
-	});
+	}
+	
 	// add 3 multipliers
 	for (let i=0; i<3; i++){
 		let numItem;
@@ -173,21 +177,20 @@ function selectCell(cell){
 		}
 
 		// add potential cells (if exists && not already selected)
-		cell.neighbors.forEach(neighborItem => {
-			let nCell = neighborItem.cell;
+		for (let i=0; i<cell.neighbors.length ;i++){
+			let nCell = cell.neighbors[i].cell;
 			// no need to check !gameInput.potentialCells.includes(nCell) because 3 cells don't share any unselected neighbor
 			if (nCell && !gameInput.selectedCells.includes(nCell)){
 				gameInput.potentialCells.push(nCell);
 			}
-		});
+		}
+		
 	}
 }
 
 function deselect(){
-	gameInput = {
-		selectedCells: [],
-		potentialCells: []
-	};
+	gameInput.selectedCells.splice(0, gameInput.selectedCells.length);
+	gameInput.potentialCells.splice(0, gameInput.potentialCells.length);
 }
 
 function sign(p1, p2, p3){
@@ -244,7 +247,8 @@ function sumMatched(cellsList, sumItem){
 	doneButton.isDisabled = false;
 
 	// collect numbers on given cells if not already used
-	cellsList.forEach(c => {
+	for (let i=0; i<cellsList.length ;i++){
+		let c = cellsList[i];
 		// add to currentLevelScore
 		if (!c.numItem.isUsed){
 			currentLevelScore += 10;
@@ -252,7 +256,7 @@ function sumMatched(cellsList, sumItem){
 			particlize(c.centerRPos[0], c.centerRPos[1]);
 			c.numItem.isUsed = true;
 		}
-	});
+	}
 }
 
 
@@ -264,13 +268,14 @@ function touchEnded(){
 		if (gameInput.selectedCells.length > 0){
 			let inputSum = calculateSum(gameInput.selectedCells);
 			// check if match any unchecked sum
-			sumsList.some(sumItem => {
+			for (let i=0; i<sumsList.length ;i++){
+				let sumItem = sumsList[i];
 				// not matched or already checked? skip
-				if (sumItem.isChecked || sumItem.value !== inputSum){return false;}
+				if (sumItem.isChecked || sumItem.value !== inputSum){continue;}
 				sumItem.isChecked = true;
 				sumMatched(gameInput.selectedCells, sumItem);
-				return true;
-			});
+				break;
+			}
 			deselect();
 		}
 
@@ -285,30 +290,32 @@ function undo(){
 	if (undoHistory.length > 0){
 		let undoItem = undoHistory.pop();
 		undoItem.sumItem.isChecked = false;
-		undoItem.cellsList.forEach(c => {
+		for (let i=0; i< undoItem.cellsList.length; i++){
+			let c = undoItem.cellsList[i];
 			currentLevelScore -= 10;
 			c.numItem.isUsed = false;
 			c.numItem.size = 1.5;
-		});
+		}
 
 		// failsafe when out of undos: restore all numbers & sums, reset current score
 		if (undoHistory.length === 0){
 			currentLevelScore = 0;
-			baseCellsList.forEach(c => {
+			for (let i=0; i< baseCellsList.length; i++){
+				let c = baseCellsList[i];
 				c.numItem.isUsed = false;
 				if (c.numItem.size < 1){
 					c.numItem.size = 1;
 				}
-			});
-			sumsList.forEach(s => {
-				s.isChecked = false;
-			});
+			}
+			for (let i=0; i< undoItem.cellsList.length; i++){
+				sumsList[i].isChecked = false;
+			}
 			undoButton.isDisabled = true;
 			doneButton.isDisabled = true;
 		}
 
 		displayScore = realScore + currentLevelScore;
-		particles = [];
+		particles.splice(0, particles.length);;
 		deselect();
 	}
 }
@@ -410,8 +417,8 @@ let undoButton, doneButton;
 
 let COLORS = {};
 function setup(){
-	HEIGHT_RATIO = 1.4;
-	CANVAS_WIDTH = min(
+	const HEIGHT_RATIO = 1.4;
+	const CANVAS_WIDTH = min(
 		document.documentElement.clientWidth,
 		document.documentElement.clientHeight/HEIGHT_RATIO
 	);
@@ -629,11 +636,14 @@ function draw(){
 	}
 
 	let currentSum = calculateSum(gameInput.selectedCells);
-	let sumIsMatched = sumsList.some(sumItem => {
-		// not matched or already checked? skip
-		if (sumItem.isChecked || sumItem.value !== currentSum){return false;}
-		return true;
-	});
+	let sumIsMatched = false;
+	for (let i=0; i<sumsList.length; i++){
+		let sumItem = sumsList[i];
+		if (!sumItem.isChecked && sumItem.value === currentSum){
+			sumIsMatched = true;
+			break;
+		}
+	}
 
 	// potential cells outline
 	strokeWeight(_(0.8));
@@ -753,9 +763,6 @@ function draw(){
 	} else {
 		// update sum generation
 		generateSum(numSpawnIndex);
-		if (isDoneSpawning()){
-			sumsList.forEach(s => console.log(s.isChecked));
-		}
 		
 		// update spawning
 		let numItem = baseCellsList[numSpawnIndex].numItem;
@@ -841,10 +848,8 @@ function preload(){
 	mainFont = loadFont('./Square.ttf');
 
 	if (typeof loadSound !== "undefined"){
-		allSounds.forEach(item => {
-			item.sound = loadSound(item.src, ()=>{
-				item.sound.setVolume(item.vol);
-			});
+		soundEffect.sound = loadSound(soundEffect.src, ()=>{
+			soundEffect.sound.setVolume(soundEffect.vol);
 		});
 	}
 }
