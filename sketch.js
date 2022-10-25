@@ -38,7 +38,7 @@ function calculateSum(cellsList){
 	let finalSum = 0;
 	for (let i=0; i<cellsList.length; i++){
 		let pCell = cellsList[i];
-		if (pCell.numItem.isUsed){ return; }
+		if (pCell.numItem.isUsed){ continue; }
 		let numItem = pCell.numItem;
 		if (numItem.operator === OPERATORS.PLUS){
 			finalSum += numItem.value;

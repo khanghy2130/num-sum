@@ -43,7 +43,7 @@
     }
 
     loadScript("p5.js", ()=>{
-      if (typeof AudioWorklet === "undefined"){
+      if (true || typeof AudioWorklet === "undefined"){
         loadGameScript();
       } else {
         loadScript("p5.sound.min.js", ()=>{
