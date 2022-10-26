@@ -10,11 +10,10 @@ let isPaused = true; // block input
 let levelIndex = 0;
 let levelScores = [0,0,0];
 const SCENES = {
-	TUTORIAL: 0,
 	PLAY: 1,
 	CONFIRM: 2
 };
-let scene = SCENES.TUTORIAL;
+let scene = SCENES.PLAY;
 
 function restartGame(){
 	// reset score, level index, new puzzle (auto reset randomness)
@@ -121,6 +120,9 @@ function generateLevel(){
 	numSpawnIndex = 0;
 	usedCells = [];
 	undoHistory = [];
+	particles = [];
+	undoButton.isDisabled = true;
+	doneButton.isDisabled = true;
 	deselect();
 
 	// generate numItems
@@ -212,9 +214,10 @@ function pointInTriangle(pt, v1, v2, v3){
 }
 
 function cellIsHovered(cell){
-	// check circular range then triangle points
-	return dist(mouseX, mouseY, cell.centerRPos[0], cell.centerRPos[1]) < _(12) && 
-	pointInTriangle([mouseX, mouseY], cell.points[0], cell.points[1], cell.points[2]);
+	return pointInTriangle(
+		[mouseX, mouseY], 
+		cell.points[0], cell.points[1], cell.points[2]
+	);
 }
 
 function touchStarted(){
@@ -241,8 +244,8 @@ function touchStarted(){
 		return;
 	}
 
-	// CONFIRM SCENE
-	if (scene === SCENES.CONFIRM){
+	// CONFIRM SCENE (if still more level)
+	if (scene === SCENES.CONFIRM && levelIndex < levelScores.length){
 		// within y range?
 		if (mouseY < _(115 + 10) && mouseY > _(115 - 10)){
 			// cancel button
@@ -258,15 +261,12 @@ function touchStarted(){
 				if (levelIndex < levelScores.length){
 					generateLevel();
 					scene = SCENES.PLAY;
+				} else {
+					////// end game
 				}
 			}
 		}
 		return;
-	}
-
-	// TUTORIAL SCENE
-	if (scene === SCENES.TUTORIAL){
-		scene = SCENES.PLAY;
 	}
 }
 
@@ -772,7 +772,7 @@ function playSceneDraw(){
 
 		// current sum display
 		if (gameInput.selectedCells.length > 0){
-			let renderY = mouseY - _(20);
+			let renderY = mouseY - _(23);
 			strokeWeight(_(0.5)); 
 			stroke(sumIsMatched? COLORS.GREEN : COLORS.WHITE); 
 			fill(COLORS.BG);
@@ -788,7 +788,7 @@ function playSceneDraw(){
 			noStroke(); textSize(_(8));
 			text(currentSum, mouseX, renderY);
 		}
-	} else {
+	} else if (!isPaused) {
 		// update sum generation
 		generateSum(numSpawnIndex);
 		
@@ -891,14 +891,6 @@ function draw(){
 		line(_(20),_(110), _(30),_(120));
 		line(_(20),_(120), _(30),_(110));
 		
-		return;
-	}
-
-	// TUTORIAL SCENE
-	if (scene === SCENES.TUTORIAL){
-		///////// tutorial rendering
-
-
 		return;
 	}
 }
