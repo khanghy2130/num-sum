@@ -15,12 +15,91 @@ const SCENES = {
 };
 let scene = SCENES.PLAY;
 
+
 function restartGame(){
 	// reset score, level index, new puzzle (auto reset randomness)
-	
+	levelIndex = 0;
+	levelScores = [0,0,0];
+	realScore = 0;
+
+	sumsList = [
+		{rPos: [_(15), _(33)], rotation: -30},
+		{rPos: [_(34), _(22)], rotation: -30},
+		{rPos: [_(15), _(111)], rotation: 30},
+		{rPos: [_(34), _(122)], rotation: 30},
+
+		{rPos: [_(66), _(122)], rotation: -30},
+		{rPos: [_(85), _(111)], rotation: -30},
+		{rPos: [_(66), _(22)], rotation: 30},
+		{rPos: [_(85), _(33)], rotation: 30}
+	];
+	sumsList.forEach(sumItem => { // same properties
+		sumItem.value = 0;
+		sumItem.isChecked = false;
+		sumItem.transition = 1;
+	});
+
+	// set up base cells
+	const excludedPos = [
+		"0,0", "3,0", "0,6", "3,6"
+	];
+	const BASE_CELLS = [];
+	staticBaseCellsList = [];
+	for (let y=0; y<7; y++){
+		const row = [];
+		for (let x=0; x<4; x++){
+			// except these 4 positions
+			if (excludedPos.includes(x+","+y)) {
+				row.push(null);
+			} else {
+				const cell = new Cell(x,y);
+				row.push(cell);
+				staticBaseCellsList.push(cell); // 1D list
+			}
+		}
+		BASE_CELLS.push(row);
+	}
+	// set up neighbors
+	for (let y=0; y<7; y++){
+		for (let x=0; x<4; x++){
+			let cell = BASE_CELLS[y][x];
+			if (cell){
+				let topNeighbor, bottomNeighbor, sideNeighbor;
+				topNeighbor = y - 1 >= 0? BASE_CELLS[y-1][x] : null;
+				bottomNeighbor = y + 1 < 7? BASE_CELLS[y+1][x] : null;
+				if (cell.isWest){
+					sideNeighbor = x + 1 < 4? BASE_CELLS[y][x + 1] : null;
+				} else {
+					sideNeighbor = x - 1 >= 0? BASE_CELLS[y][x - 1] : null;
+				}
+
+				cell.neighbors.push({
+					cell: topNeighbor,
+					border: [
+						cell.points[0],
+						cell.points[1]
+					]
+				});
+				cell.neighbors.push({
+					cell: bottomNeighbor,
+					border: [
+						cell.points[0],
+						cell.points[2]
+					]
+				});
+				cell.neighbors.push({
+					cell: sideNeighbor,
+					border: [
+						cell.points[1],
+						cell.points[2]
+					]
+				});
+			}
+		}
+	}
+
+	generateLevel();
 }
-
-
 
 
 // {rPos, rotation, value, isChecked, transition (0-1)}
@@ -32,6 +111,18 @@ const OPERATORS = {
 	MINUS: "minus",
 	TIMES: "times"
 };
+
+
+// replaces random(), must pass an array or 2 numbers
+function r(start, end){
+	// start isn't number? must be array!
+	if (typeof start !== "number"){
+		return start[randomInt(0, start.length)];
+	}
+
+	// with 2 numbers
+	return map(Rune.deterministicRandom(), 0, 1, start, end);
+}
 
 function calculateSum(cellsList){
 	let finalSum = 0;
@@ -55,10 +146,10 @@ function calculateSum(cellsList){
 function getRandomCell(cellsList){
 	let newCell;
 	while (true){
-		newCell = random(cellsList);
+		newCell = r(cellsList);
 		// 80% chance to reroll if already used
 		if (usedCells.includes(newCell)){
-			if (random() < 0.9) { continue; }
+			if (r(0,1) < 0.9) { continue; }
 		} 
 		else { usedCells.push(newCell); }
 		break;
@@ -116,8 +207,10 @@ function generateSum(sumIndex){
 // setting up new level
 function generateLevel(){
 	// reset all game states
+	scene = SCENES.PLAY;
 	currentLevelScore = 0;
 	numSpawnIndex = 0;
+	displayScore = realScore;
 	usedCells = [];
 	undoHistory = [];
 	particles = [];
@@ -125,22 +218,33 @@ function generateLevel(){
 	doneButton.isDisabled = true;
 	deselect();
 
+	// shuffle baseCellsList
+	baseCellsList = staticBaseCellsList.slice(0);
+	let temporaryArr = [];
+	while (baseCellsList.length > 0){
+		temporaryArr.push(
+			baseCellsList.splice(
+				randomInt(0, baseCellsList.length), 1
+			).pop()
+		);
+	}
+	baseCellsList = temporaryArr;
+
 	// generate numItems
 	for (let i=0; i<baseCellsList.length ;i++){
 		let cell = baseCellsList[i];
 		cell.numItem = {
 			value: randomInt(1, 10),
 			// 60% to be positive
-			operator: random() < 0.6? OPERATORS.PLUS : OPERATORS.MINUS,
+			operator: r(0,1) < 0.6? OPERATORS.PLUS : OPERATORS.MINUS,
 			size: 0
 		};
 	}
-	
 	// add 3 multipliers
 	for (let i=0; i<3; i++){
 		let numItem;
 		while (true){
-			numItem = random(baseCellsList).numItem;
+			numItem = r(baseCellsList).numItem;
 			// is already TIMES?
 			if (numItem.operator === OPERATORS.TIMES){
 				continue;
@@ -150,7 +254,6 @@ function generateLevel(){
 			break;
 		}
 	}
-
 }
 
 /* CONTROL */
@@ -260,9 +363,8 @@ function touchStarted(){
 				levelIndex++;
 				if (levelIndex < levelScores.length){
 					generateLevel();
-					scene = SCENES.PLAY;
 				} else {
-					////// end game
+					Rune.gameOver();
 				}
 			}
 		}
@@ -363,13 +465,14 @@ function _(n){
 }
 
 function randomInt(start, end){
-	return floor(random(start, end));
+	return floor(r(start, end));
 }
 
 const TRIANGLE_LENGTH = 26; // out of 100%
 const TRIANGLE_HEIGHT = Math.sqrt(3)/2*TRIANGLE_LENGTH;
 const BOARD_CENTER = [50, 72];
 const DISPLAY_SCORE_CENTER = [20, 10];
+let staticBaseCellsList = [];
 let baseCellsList = [];
 
 // rendering info only
@@ -514,94 +617,9 @@ function setup(){
 			scene = SCENES.CONFIRM;
 	});
 
-	// set up sums list
-	sumsList = [
-		{rPos: [_(15), _(33)], rotation: -30},
-		{rPos: [_(34), _(22)], rotation: -30},
-		{rPos: [_(15), _(111)], rotation: 30},
-		{rPos: [_(34), _(122)], rotation: 30},
-
-		{rPos: [_(66), _(122)], rotation: -30},
-		{rPos: [_(85), _(111)], rotation: -30},
-		{rPos: [_(66), _(22)], rotation: 30},
-		{rPos: [_(85), _(33)], rotation: 30}
-	];
-	sumsList.forEach(sumItem => { // same properties
-		sumItem.value = 0;
-		sumItem.isChecked = false;
-		sumItem.transition = 1;
-	});
-
-	// set up base cells
-	const excludedPos = [
-		"0,0", "3,0", "0,6", "3,6"
-	];
-	const BASE_CELLS = [];
-	for (let y=0; y<7; y++){
-		const row = [];
-		for (let x=0; x<4; x++){
-			// except these 4 positions
-			if (excludedPos.includes(x+","+y)) {
-				row.push(null);
-			} else {
-				const cell = new Cell(x,y);
-				row.push(cell);
-				baseCellsList.push(cell); // 1D list
-			}
-		}
-		BASE_CELLS.push(row);
-	}
-	// set up neighbors
-	for (let y=0; y<7; y++){
-		for (let x=0; x<4; x++){
-			let cell = BASE_CELLS[y][x];
-			if (cell){
-				let topNeighbor, bottomNeighbor, sideNeighbor;
-				topNeighbor = y - 1 >= 0? BASE_CELLS[y-1][x] : null;
-				bottomNeighbor = y + 1 < 7? BASE_CELLS[y+1][x] : null;
-				if (cell.isWest){
-					sideNeighbor = x + 1 < 4? BASE_CELLS[y][x + 1] : null;
-				} else {
-					sideNeighbor = x - 1 >= 0? BASE_CELLS[y][x - 1] : null;
-				}
-
-				cell.neighbors.push({
-					cell: topNeighbor,
-					border: [
-						cell.points[0],
-						cell.points[1]
-					]
-				});
-				cell.neighbors.push({
-					cell: bottomNeighbor,
-					border: [
-						cell.points[0],
-						cell.points[2]
-					]
-				});
-				cell.neighbors.push({
-					cell: sideNeighbor,
-					border: [
-						cell.points[1],
-						cell.points[2]
-					]
-				});
-			}
-		}
-	}
-
-	// shuffle baseCellsList
-	let temporaryArr = [];
-	while (baseCellsList.length > 0){
-		temporaryArr.push(
-			baseCellsList.splice(randomInt(0, baseCellsList.length),1).pop()
-		);
-	}
-	baseCellsList = temporaryArr;
-
-	generateLevel();
-
-	//isPaused = false; ////
+	restartGame();
+	
+	// isPaused = false; // without Rune
 	
 	Rune.init({
 		resumeGame: function () {
