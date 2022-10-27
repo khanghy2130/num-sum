@@ -1,4 +1,10 @@
 "use strict";
+const LEVELS_INFO = [
+	// [amount of removed numbers, amount of multipliers]
+	[8, 0],
+	[4, 1],
+	[0, 3]
+];
 const SUM_COLOR_SPEED = 0.2;
 const PARTICLES_AMOUNT = 5;
 
@@ -231,22 +237,38 @@ function generateLevel(){
 	baseCellsList = temporaryArr;
 
 	// generate numItems
-	for (let i=0; i<baseCellsList.length ;i++){
+	const removedAmount = LEVELS_INFO[levelIndex][0];
+	for (let i=0; i<baseCellsList.length - removedAmount;i++){
 		let cell = baseCellsList[i];
 		cell.numItem = {
 			value: randomInt(1, 10),
 			// 60% to be positive
 			operator: r(0,1) < 0.6? OPERATORS.PLUS : OPERATORS.MINUS,
-			size: 0
+			size: 0,
+			isUsed: false,
+			mustBeUsed: false
 		};
 	}
-	// add 3 multipliers
-	for (let i=0; i<3; i++){
+
+	// empty cells
+	for (let i=baseCellsList.length - removedAmount; i < baseCellsList.length; i++){
+		let cell = baseCellsList[i];
+		cell.numItem = {
+			value: 0,
+			operator: OPERATORS.PLUS,
+			size: 0,
+			isUsed: true,
+			mustBeUsed: true
+		};
+	}
+
+	// add multipliers
+	for (let i=0; i<LEVELS_INFO[levelIndex][1]; i++){
 		let numItem;
 		while (true){
 			numItem = r(baseCellsList).numItem;
-			// is already TIMES?
-			if (numItem.operator === OPERATORS.TIMES){
+			// is already TIMES or should be empty? skip
+			if (numItem.operator === OPERATORS.TIMES || numItem.mustBeUsed){
 				continue;
 			}
 			numItem.value = randomInt(2,5);
@@ -427,9 +449,11 @@ function undo(){
 		undoItem.sumItem.isChecked = false;
 		for (let i=0; i< undoItem.cellsList.length; i++){
 			let c = undoItem.cellsList[i];
-			currentLevelScore -= 10;
-			c.numItem.isUsed = false;
-			c.numItem.size = 1.5;
+			if (!c.numItem.mustBeUsed) {
+				c.numItem.isUsed = false;
+				c.numItem.size = 1.5;
+				currentLevelScore -= 10;
+			}
 		}
 
 		// failsafe when out of undos: restore all numbers & sums, reset current score
@@ -437,9 +461,12 @@ function undo(){
 			currentLevelScore = 0;
 			for (let i=0; i< baseCellsList.length; i++){
 				let c = baseCellsList[i];
-				c.numItem.isUsed = false;
-				if (c.numItem.size < 1){
-					c.numItem.size = 1;
+				// not empy cell?
+				if (!c.numItem.mustBeUsed) {
+					c.numItem.isUsed = false;
+					if (c.numItem.size < 1){
+						c.numItem.size = 1;
+					}
 				}
 			}
 			for (let i=0; i< undoItem.cellsList.length; i++){
@@ -480,7 +507,7 @@ let baseCellsList = [];
 	x,y, isWest (pointing left), 
 	centerRPos[rx,ry], points[rx, ry][3], 
 	neighbors {cell, border}[], 
-	numItem    null | { size, value, operator, isUsed }
+	numItem    null | { size, value, operator, isUsed, mustBeUsed }
 }*/
 function Cell(x,y){
 	// neighbors contains 3 of {cell: null | Cell, border: [point1, point2]}
@@ -812,8 +839,11 @@ function playSceneDraw(){
 		
 		// update spawning
 		let numItem = baseCellsList[numSpawnIndex].numItem;
-		numItem.size = 1.8;
-		numItem.isUsed = false;
+		// not empty cell?
+		if (!numItem.mustBeUsed) {
+			numItem.size = 1.8;
+			numItem.isUsed = false;
+		}
 		numSpawnIndex++;
 	}
 
