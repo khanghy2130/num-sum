@@ -222,6 +222,7 @@ function generateLevel(){
 	particles = [];
 	undoButton.isDisabled = true;
 	doneButton.isDisabled = true;
+	moveChecker.reset();
 	deselect();
 
 	// shuffle baseCellsList
@@ -402,6 +403,7 @@ function sumMatched(cellsList, sumItem){
 	});
 	undoButton.isDisabled = false;
 	doneButton.isDisabled = false;
+	moveChecker.reset();
 
 	// collect numbers on given cells if not already used
 	for (let i=0; i<cellsList.length ;i++){
@@ -480,6 +482,7 @@ function undo(){
 		particles.splice(0, particles.length);;
 		deselect();
 	}
+	moveChecker.reset();
 }
 
 
@@ -575,6 +578,120 @@ function particlize(x, y){
 		});
 	}
 }
+
+
+/* 
+- movesList  (recursion tree). 
+Keep adding new moves until last move has empty neighbors list.
+- currentRootIndex (0-23). If tree is empty then ++ to do next root cell.
+Don't do multipliers.
+- Each move item:
+• pieceCells Cell[]
+• remainingNeighborCells Cell[]
+• If remainingNeighborCells isn't empty, make new move and remove the neighbor.
+• If remainingNeighborCells is empty or already 4 piece cells, 
+check self sum then pop from tree
+*/
+const moveChecker = {
+	availableSum: null,
+	currentRootIndex: 0,
+	movesList: [],
+	runCounter: 0, // limit how many runs per frame
+	noMoreMove: false,
+	reset: function(){ // clear all
+		this.availableSum = null;
+		this.noMoreMove = false;
+		this.currentRootIndex = 0;
+		this.runCounter = 0;
+		this.movesList = this.movesList.splice(0, this.movesList.length);
+	},
+	multiUpdate: function(){
+		this.runCounter = 0;
+		// still more root cells to check && not hitting runs limit yet
+		while(this.currentRootIndex < baseCellsList.length &&
+		this.runCounter++ < 70){ // RUNS LIMIT
+			this.singleUpdate();
+		}
+	},
+	addNewMove: function(pieceCells){
+		// add a move item {pieceCells, remainingNeighborCells}
+		let remainingNeighborCells = [];
+		
+		// get all neighbor cells (unless already 4 piece cells)
+		if (pieceCells.length < 4){
+			// a neighbor cell isn't null or already in pieceCells
+			for (let i=0; i < pieceCells.length; i++){
+				let neighbors = pieceCells[i].neighbors;
+				for (let j=0; j < neighbors.length; j++){
+					let nCell = neighbors[j].cell;
+					if (nCell && !pieceCells.includes(nCell)){
+						remainingNeighborCells.push(nCell);
+					}
+				}
+			}
+		}
+
+		this.movesList.push({
+			pieceCells: pieceCells,
+			remainingNeighborCells: remainingNeighborCells
+		});
+	},
+	increaseRootIndex: function(){
+		this.currentRootIndex++;
+		if (this.currentRootIndex >= baseCellsList.length){
+			this.noMoreMove = true;
+		}
+	},
+	singleUpdate: function(){
+		// if movesList is empty then do next root cell (if is not multiplier)
+		if (this.movesList.length === 0){
+			// just check if index doesn't exceed
+			if (this.currentRootIndex < baseCellsList.length){
+				let rootCell = baseCellsList[this.currentRootIndex];
+				// not multiplier?
+				if (rootCell.numItem.operator !== OPERATORS.TIMES){
+					this.addNewMove([rootCell]);
+				} else {
+					this.increaseRootIndex();
+				}
+			}
+		} 
+		// if still has move items
+		else {
+			let lastMoveItem = this.movesList[this.movesList.length-1];
+			// if there is any neighbor to spread?
+			// ...add new move: spread to a neighbor and remove it
+			if (lastMoveItem.remainingNeighborCells.length !== 0){
+				let newPieceCells = lastMoveItem.pieceCells.slice(0);
+				newPieceCells.push(lastMoveItem.remainingNeighborCells.pop());
+				this.addNewMove(newPieceCells);
+			}
+			// if no more neighbor to spread? check self sum and pop
+			// ...when popping, if empty list then currentRootIndex++
+			else {
+				// check self sum, if still available then stop checker
+				let selfSum = calculateSum(lastMoveItem.pieceCells);
+				for (let i=0; i<sumsList.length; i++){
+					let sumItem = sumsList[i];
+					if (!sumItem.isChecked && sumItem.value === selfSum){
+						this.currentRootIndex = 99;
+						this.availableSum = selfSum;
+						return;
+					}
+				}
+
+				this.movesList.pop();
+				if (this.movesList.length === 0){
+					this.increaseRootIndex();
+				}
+			}
+		}
+
+	}
+};
+
+
+
 
 let undoButton, doneButton;
 
@@ -833,6 +950,8 @@ function playSceneDraw(){
 			noStroke(); textSize(_(8));
 			text(currentSum, mouseX, renderY);
 		}
+
+		moveChecker.multiUpdate();
 	} else if (!isPaused) {
 		// update sum generation
 		generateSum(numSpawnIndex);
@@ -868,6 +987,22 @@ function playSceneDraw(){
 			displayScoreSize = 1.8; // enlarge score
 			displayScore += 10/PARTICLES_AMOUNT;
 		}
+	}
+
+	// done button suggestion
+	if (moveChecker.noMoreMove){
+		stroke(COLORS.WHITE); noFill();
+		strokeWeight(_(0.7));
+		let enlargeFactor = map(cos(frameCount*7), -1, 1, 1, 1.5);
+		rect(
+			doneButton.x, doneButton.y, 
+			(doneButton.size*2) * enlargeFactor, (doneButton.size*2 - _(2)) * enlargeFactor, 
+			_(1.5)
+		);
+	} else if (moveChecker.availableSum !== null) {
+		noStroke(); fill(COLORS.GRAY);
+		textSize(_(7));
+		text(moveChecker.availableSum, doneButton.x - _(15), doneButton.y - (12));
 	}
 
 	// buttons
